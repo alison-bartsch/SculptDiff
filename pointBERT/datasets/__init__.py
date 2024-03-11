@@ -1,0 +1,6 @@
+from .build import build_dataset_from_cfg
+import pointBERT.datasets.ClayDemoDataset
+import pointBERT.datasets.ShapeNet55Dataset
+import pointBERT.datasets.ModelNetDataset
+import pointBERT.datasets.ModelNetDatasetFewShot
+import pointBERT.datasets.ScanObjectNNDataset

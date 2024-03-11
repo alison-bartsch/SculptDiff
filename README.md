@@ -6,6 +6,7 @@ INSERT INSTRUCTIONS
 
 ## Setup PointBERT
 INSERT INSTRUCTIONS
+- download pre-trained model weights
  
 ## Install Dependencies
 INSERT INSTRUCTIONS

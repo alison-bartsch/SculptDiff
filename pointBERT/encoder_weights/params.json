@@ -1,0 +1,1 @@
+{"lr": 0.0001, "weight_decay": 0, "epochs": 500, "log_interval": 1, "batch_size": 32, "a_dim": 5, "n_pts": 2048, "pcl_type": "shell_scaled", "seed": 0, "name": "exp1", "script": "train_action"}
