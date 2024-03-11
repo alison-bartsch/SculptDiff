@@ -1,4 +1,5 @@
-# SculptDiff
+# SculptDiff: Learning Robotic Clay Sculpting from Humans with Goal Conditioned Diffusion Policy
+[arXiv] [Project Website] [Model Weights]
 INSERT BLURB ABOUT THIS PROJECT
 
 ## Download Dataset
