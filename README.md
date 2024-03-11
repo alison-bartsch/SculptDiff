@@ -1,5 +1,6 @@
 # SculptDiff: Learning Robotic Clay Sculpting from Humans with Goal Conditioned Diffusion Policy
-[arXiv] [Project Website] [Model Weights]
+[arXiv] [Project Website] 
+
 INSERT BLURB ABOUT THIS PROJECT
 
 ## Download Dataset
@@ -14,3 +15,6 @@ INSERT INSTRUCTIONS
 
 ## Train Policies
 INSERT INSTRUCTIONS FOR VISION VS POINT CLOUD
+
+## Replicate Harware Setup
+INSERT INSTRUCTIONS FOR CAMERA CAGE AND ELEVATED STAGE
