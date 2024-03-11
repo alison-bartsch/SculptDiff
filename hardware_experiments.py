@@ -43,7 +43,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     # define diffusion parameters
     obs_horizon = 1
     B = 1
-    pred_horizon = 4 # 4 # 8
+    pred_horizon = 4 
     action_dim = 5
     num_diffusion_iters = 100
     noise_scheduler = DDPMScheduler(
@@ -110,9 +110,9 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     rgb4, _, pc4, _ = cam4._get_next_frame()
     rgb5, _, pc5, _ = cam5._get_next_frame()
 
-    pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds(pc2, pc3, pc4, pc5)
+    unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds(pc2, pc3, pc4, pc5)
     # center and scale pointcloud
-    pointcloud = (pcl - ctr) * 10
+    pointcloud = (unnorm_pcl - ctr) * 10
 
     # save the point clouds from each camera
     o3d.io.write_point_cloud(save_path + '/cam2_pcl0.ply', pc2)
@@ -123,7 +123,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     # center the goal based on the goal center
     numpy_goal = (raw_goal - ctr) * 10.0
     # scale distance metric goal differently 
-    dist_goal = (raw_goal - np.mean(raw_goal, axis=0)) * 10.0
+    dist_goal = numpy_goal.copy()
 
     # visualize observation vs goal cloud
     pcl = o3d.geometry.PointCloud()
@@ -143,17 +143,15 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     cv2.imwrite(save_path + '/rgb5_state0.jpg', rgb5)
 
     # get the distance metrics between the point cloud and goal
-    dist_metrics = {'CD': chamfer(pointcloud, dist_goal),
-                    'EMD': emd(pointcloud, dist_goal),
-                    'HAUSDORFF': hausdorff(pointcloud, dist_goal)}
+    dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goal),
+                    'EMD': emd(unnorm_pcl, raw_goal),
+                    'HAUSDORFF': hausdorff(unnorm_pcl, raw_goal)}
 
     print("\nDists: ", dist_metrics)
     with open(save_path + '/dist_metrics_0.txt', 'w') as f:
         f.write(str(dist_metrics))
 
-    # for i in range(12): # maximum number of actions allowed
     for i in range(2):
-        # generate the next action given the observation and goal and convert to the robot's coordinate frame
         with torch.inference_mode():
             start = time.time()
             # pass the point cloud through Point-BERT to get the latent representation
@@ -232,9 +230,9 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             rgb3, _, pc3, _ = cam3._get_next_frame()
             rgb4, _, pc4, _ = cam4._get_next_frame()
             rgb5, _, pc5, _ = cam5._get_next_frame()
-            pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds(pc2, pc3, pc4, pc5)
+            unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds(pc2, pc3, pc4, pc5)
             # center and scale pointcloud
-            pointcloud = (pcl - ctr) * 10
+            pointcloud = (unnorm_pcl - ctr) * 10
 
             # save the point clouds from each camera
             o3d.io.write_point_cloud(save_path + '/cam2_pcl' + str(i*4 + j + 1) + '.ply', pc2)
@@ -245,7 +243,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             # center the goal based on the point cloud center
             numpy_goal = (raw_goal - ctr) * 10.0
             # scale distance metric goal differently 
-            dist_goal = (raw_goal - np.mean(raw_goal, axis=0)) * 10.0
+            dist_goal = numpy_goal.copy()
 
             # visualize observation vs goal cloud
             pcl = o3d.geometry.PointCloud()
@@ -264,9 +262,10 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             cv2.imwrite(save_path + '/rgb4_state' + str(i*4 + j + 1) + '.jpg', rgb4)
             cv2.imwrite(save_path + '/rgb5_state' + str(i*4 + j + 1) + '.jpg', rgb5)
 
-            dist_metrics = {'CD': chamfer(pointcloud, dist_goal),
-                            'EMD': emd(pointcloud, dist_goal),
-                            'HAUSDORFF': hausdorff(pointcloud, dist_goal)}
+            # get the distance metrics between the point cloud and goal
+            dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goal),
+                            'EMD': emd(unnorm_pcl, raw_goal),
+                            'HAUSDORFF': hausdorff(unnorm_pcl, raw_goal)}
 
             print("\nDists: ", dist_metrics)
             with open(save_path + '/dist_metrics_' + str(i+1) + '.txt', 'w') as f:
@@ -288,13 +287,10 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 def video_loop(cam_pipeline, save_path, done_queue):
     '''
     '''
-    # forcc = cv2.VideoWriter_fourcc(*'XVID')
-    forcc = cv2.VideoWriter_fourcc(*'MP4V')
+    forcc = cv2.VideoWriter_fourcc(*'XVID')
     if not os.path.exists(save_path):
         os.mkdir(save_path)
-    # out = cv2.VideoWriter(save_path + '/video.avi', forcc, 30.0, (848, 480))
-    # out = cv2.VideoWriter(save_path + '/video.avi', forcc, 30.0, (1280, 800))
-    out = cv2.VideoWriter(save_path + '/video.mp4', forcc, 30.0, (1280, 800))
+    out = cv2.VideoWriter(save_path + '/video.avi', forcc, 30.0, (1280, 800))
 
     frame_save_counter = 0
     # record until main loop is complete
@@ -311,7 +307,7 @@ def video_loop(cam_pipeline, save_path, done_queue):
         if frame_save_counter % 100 == 0:
             cv2.imwrite(save_path + '/external_rgb' + str(frame_save_counter) + '.jpg', rotated_image)
         frame_save_counter += 1
-        out.write(rotated_image)
+        out.write(color_image)
     
     cam_pipeline.stop()
     out.release()
