@@ -1,5 +1,5 @@
 # SculptDiff: Learning Robotic Clay Sculpting from Humans with Goal Conditioned Diffusion Policy
-[arXiv] [Project Website](https://sites.google.com/andrew.cmu.edu/imitation-sculpting/home) 
+[[arXiv]](insertlink) [[Project Website]](https://sites.google.com/andrew.cmu.edu/imitation-sculpting/home) 
 
 INSERT BLURB ABOUT THIS PROJECT
 
