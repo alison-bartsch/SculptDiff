@@ -35,7 +35,7 @@ latent_dim = 512
 projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
 
 # define the dataloader
-n_datapoints = 2520 # the desired numer of datapoints after augmentation
+n_datapoints = 2880 # the desired numer of datapoints after augmentation
 n_raw_trajectories = 7 # the number of raw datapoints
 pred_horizon = 4 
 num_epochs = 750
