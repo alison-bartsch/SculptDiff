@@ -1,3 +1,7 @@
+"""
+Code adapted from diffusion_policy: https://github.com/real-stanford/diffusion_policy
+"""
+
 import math
 from typing import Union, Optional, Tuple
 import logging

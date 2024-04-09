@@ -1,3 +1,7 @@
+"""
+Code adapted from diffusion_policy: https://github.com/real-stanford/diffusion_policy
+"""
+
 import os
 import torch
 import torch.nn as nn
