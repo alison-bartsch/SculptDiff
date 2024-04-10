@@ -36,13 +36,13 @@ latent_dim = 512
 projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
 
 # define the dataloader
-n_datapoints = 2880 # the desired numer of datapoints after augmentation
+n_datapoints = 700 # the desired numer of datapoints after augmentation
 n_raw_trajectories = 7 # the number of raw datapoints
 pred_horizon = 4 
 num_epochs = 750
 target_shape = "Line" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
-dataset_path = "ClayDemoDataset/" + str(target_shape) + "/Train" 
-test_dataset_path = "ClayDemoDataset/" + str(target_shape) + "/Test" 
+dataset_path = "/home/alison/Clay_Data/ClayDemoDataset/" + str(target_shape) + "/Train" 
+test_dataset_path = "/home/alison/Clay_Data/ClayDemoDataset/" + str(target_shape) + "/Test" 
 center_actions = False
 dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
 dataloader = torch.utils.data.DataLoader(
@@ -231,9 +231,9 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
                         s_idx = start_state[k]
 
                         # import the state, center and goal 
-                        ctr = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/pcl_center' + str(s_idx) + '.npy')
+                        ctr = np.load(test_dataset_path + '/Trajectory' + str(t) + '/pcl_center' + str(s_idx) + '.npy')
                         # goal = np.load(test_dataset_path + '/goal_unnormalized.npy')
-                        state = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/state' + str(s_idx) + '.npy')
+                        state = np.load(test_dataset_path + '/Trajectory' + str(t) + '/state' + str(s_idx) + '.npy')
 
                         # # center and scale goal
                         # goal = (goal - ctr) * 10.0
@@ -261,7 +261,7 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
                         if s_idx == 0:
                             pos = np.array([0.6, 0.0, 0.165, 0.0, 0.05])
                         else:
-                            pos = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/action' + str(s_idx-1) + '.npy')
+                            pos = np.load(test_dataset_path + '/Trajectory' + str(t) + '/action' + str(s_idx-1) + '.npy')
                         
                         # normalize and scale action
                         a_mins5d = np.array([0.56, -0.062, 0.125, -90, 0.005])
@@ -313,14 +313,12 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
                         start = obs_horizon - 1
                         end = start + action_horizon
                         diff_action = action_pred[start:end,:] # (4, 5)
-                        
-                        
 
                         # get the ground truth 5 next actions
                         gt_actions = []
                         norm_actions = []
                         for i in range(action_horizon):
-                            action = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/action' + str(i+s_idx) + '.npy')
+                            action = np.load(test_dataset_path + '/Trajectory' + str(t) + '/action' + str(i+s_idx) + '.npy')
                             gt_actions.append(action)
 
                             # normalize and scale action

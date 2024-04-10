@@ -130,7 +130,7 @@ class ClayDataset(torch.utils.data.Dataset):
         state = states[start_ts]
         
         # load uncentered goal
-        g = np.load(traj_path + '/new_goal_unnormalized.npy')
+        g = np.load(traj_path + '/goal_unnormalized.npy')
         g_rot = self._rotate_pcl(g, centers[start_ts], aug_rot)
         goal = self._center_pcl(g_rot, centers[start_ts])
 
