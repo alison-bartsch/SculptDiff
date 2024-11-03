@@ -80,9 +80,9 @@ noise_scheduler = DDPMScheduler(
 
 # define parameters
 pcl_feature_dim = 512
-lowdim_obs_dim = 5 
+lowdim_obs_dim = 6 
 obs_dim = 2*pcl_feature_dim + lowdim_obs_dim
-action_dim = 5 
+action_dim = 6 
 obs_horizon = 1
 
 # create network object
@@ -242,6 +242,7 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
                         a_maxs5d = np.array([0.7, 0.062, 0.165, 90, 0.05])
                         pos = (pos - a_mins5d) / (a_maxs5d - a_mins5d)
                         pos = pos * 2.0 - 1.0
+                        pos = np.concatenate((pos, np.array([-1.])), axis=0)
                         nagent_pos = torch.from_numpy(pos).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
 
                         # generate conditioning vector
@@ -279,7 +280,7 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
                         # (B, pred_horizon, action_dim)
                         naction = naction[0]
                         print("\n\n\nNorm Action Prediction: ", naction)
-                        action_pred = (naction + 1.0) / 2.0
+                        action_pred = (naction[:,0:5] + 1.0) / 2.0
                         action_pred = action_pred * (a_maxs5d - a_mins5d) + a_mins5d
                         
                         # only take action_horizon number of actions

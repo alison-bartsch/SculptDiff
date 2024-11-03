@@ -44,7 +44,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     obs_horizon = 1
     B = 1
     pred_horizon = 4 
-    action_dim = 5
+    action_dim = 6
     num_diffusion_iters = 100
     noise_scheduler = DDPMScheduler(
         num_train_timesteps=num_diffusion_iters,
@@ -71,6 +71,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     qpos = np.array([0.6, 0.0, 0.165, 0.0, 0.05])
     qpos = (qpos - a_mins5d) / (a_maxs5d - a_mins5d)
     qpos = qpos * 2.0 - 1.0
+    qpos = np.concatenate((qpos, np.array([-1.])), axis=0)
     nagent_pos = torch.from_numpy(qpos).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
 
     # initialize the pointbert model
@@ -151,7 +152,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     with open(save_path + '/dist_metrics_0.txt', 'w') as f:
         f.write(str(dist_metrics))
 
-    for i in range(2):
+    in_progress = True
+    while in_progress:
         with torch.inference_mode():
             start = time.time()
             # pass the point cloud through Point-BERT to get the latent representation
@@ -203,11 +205,13 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
         # execute 4 actions before replanning
         pred_action = naction[0]
-        action_pred = (pred_action + 1.0) / 2.0
+        termination_pred = pred_action[:,5]
+        action_pred = (pred_action[:,0:5] + 1.0) / 2.0
         action_pred = action_pred * (a_maxs5d - a_mins5d) + a_mins5d
         
         for j in range(action_pred.shape[0]):
             unnorm_a = action_pred[j,:]
+            terminate = termination_pred[j]
 
             if centered_action:
                 unnorm_a[0:3] = unnorm_a[0:3] + ctr
@@ -271,10 +275,11 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             with open(save_path + '/dist_metrics_' + str(i+1) + '.txt', 'w') as f:
                 f.write(str(dist_metrics))
             
-            # exit loop early if the goal is reached
-            if dist_metrics['CD'] < 0.0075 or dist_metrics['EMD'] < 0.0075:
+            # if that action was predicted to be the final action, then terminate the experiment
+            if terminate > 0:
+                in_progress = False
                 break
-
+            
     # completed the experiment, send the message to the video recording loop
     done_queue.put("Done!")
     

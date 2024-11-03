@@ -136,6 +136,12 @@ class ClayDataset(torch.utils.data.Dataset):
 
         action = actions[start_ts:]
         action = np.stack(action, axis=0)
+
+        # add in termination token -1 continue, 1 stop
+        stop_token = -1 * np.ones((self.pred_horizon, 1))
+        stop_token[-1] = 1
+        action = c
+        
         action_len = episode_len - start_ts
 
         if start_ts != 0:
