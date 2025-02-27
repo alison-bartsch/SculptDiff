@@ -158,7 +158,7 @@ class ClayDataset(torch.utils.data.Dataset):
                 obs_pos = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]))
 
         if action_len < self.pred_horizon:
-            padded_action = np.zeros((self.pred_horizon, 5))
+            padded_action = np.zeros((self.pred_horizon, 8))
             padded_action[:action_len] = action
             for i in range(action_len, self.pred_horizon):
                 padded_action[i] = action[-1]
