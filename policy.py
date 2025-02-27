@@ -253,7 +253,7 @@ class ConditionalUnet1D(nn.Module):
             x = torch.cat((x, h.pop()), dim=1)
             x = resnet(x, global_feature)
             x = resnet2(x, global_feature)
-            x = upsample(x)
+            # x = upsample(x)
 
         x = self.final_conv(x)
 

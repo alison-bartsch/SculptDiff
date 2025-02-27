@@ -143,7 +143,7 @@ class ClayDataset(torch.utils.data.Dataset):
         action = np.stack(action, axis=0)
 
         # add in termination token -1 continue, 1 stop
-        stop_token = -1 * np.ones((self.pred_horizon, 1))
+        stop_token = -1 * np.ones((action.shape[0], 1))
         stop_token[-1] = 1
         action = np.concatenate((action, stop_token), axis=1)
         
