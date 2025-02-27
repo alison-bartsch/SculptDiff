@@ -7,6 +7,7 @@ from os.path import exists
 from PIL import Image
 from scipy.spatial.transform import Rotation
 
+# NOTE: updating for 7D actions with new fingertip tool for variable pot creation (final pcl is the goal)
 class ClayDataset(torch.utils.data.Dataset):
     def __init__(self, dataset_dir, pred_horizon, n_datapoints, n_raw_trajectories, center_action):
         """
