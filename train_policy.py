@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 from pointBERT.tools import builder
 from pointBERT.utils.config import cfg_from_yaml_file
 from embeddings import EncoderHead
-from dataset import ClayDataset
+from test_dataset import ClayDataset
 from os.path import join
 import os
 import numpy as np
@@ -14,7 +14,7 @@ import torch
 
 
 # exp name
-exp_name = 'Line_correctpointbert'
+exp_name = 'pottery_test'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -36,12 +36,12 @@ projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
 
 # define the dataloader
 n_datapoints = 2880 # the desired numer of datapoints after augmentation
-n_raw_trajectories = 7 # the number of raw datapoints
+n_raw_trajectories = 5 # the number of raw datapoints
 pred_horizon = 4 
 num_epochs = 750
-target_shape = "Line" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
-dataset_path = "ClayDemoDataset/" + str(target_shape) + "/Train" 
-test_dataset_path = "ClayDemoDataset/" + str(target_shape) + "/Test" 
+target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
+dataset_path = '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
+# test_dataset_path = "ClayDemoDataset/" + str(target_shape) + "/Test" 
 center_actions = False
 dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
 dataloader = torch.utils.data.DataLoader(
@@ -80,9 +80,9 @@ noise_scheduler = DDPMScheduler(
 
 # define parameters
 pcl_feature_dim = 512
-lowdim_obs_dim = 6 
+lowdim_obs_dim = 8 
 obs_dim = 2*pcl_feature_dim + lowdim_obs_dim
-action_dim = 6 
+action_dim = 8
 obs_horizon = 1
 
 # create network object
@@ -196,117 +196,117 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
                 noise_checkpoint = {'noise_pred_net': nets['noise_pred_net']}
                 torch.save(noise_checkpoint, join(ckpt_dir, 'noise_pred_best_checkpoint'))
 
-            if epoch_idx % 100 == 0:
-                print("\n\n\n\n\n----------------- PREDICTIONS -------------------")
-                with torch.inference_mode():
-                    nets['projection_head'].eval()
-                    nets['pointbert_encoder'].eval()
-                    nets['noise_pred_net'].eval()
+            # if epoch_idx % 100 == 0:
+            #     print("\n\n\n\n\n----------------- PREDICTIONS -------------------")
+            #     with torch.inference_mode():
+            #         nets['projection_head'].eval()
+            #         nets['pointbert_encoder'].eval()
+            #         nets['noise_pred_net'].eval()
 
-                    # do this for test trajectories
-                    trajs = [0,1]
-                    start_state = [0,0]
-                    for k in range(len(trajs)):
-                        t = trajs[k]
-                        s_idx = start_state[k]
+            #         # do this for test trajectories
+            #         trajs = [0,1]
+            #         start_state = [0,0]
+            #         for k in range(len(trajs)):
+            #             t = trajs[k]
+            #             s_idx = start_state[k]
 
-                        # import the state, center and goal 
-                        ctr = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/pcl_center' + str(s_idx) + '.npy')
-                        goal = np.load(test_dataset_path + '/goal_unnormalized.npy')
-                        state = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/state' + str(s_idx) + '.npy')
+            #             # import the state, center and goal 
+            #             ctr = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/pcl_center' + str(s_idx) + '.npy')
+            #             goal = np.load(test_dataset_path + '/goal_unnormalized.npy')
+            #             state = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/state' + str(s_idx) + '.npy')
 
-                        # center and scale goal
-                        goal = (goal - ctr) * 10.0
-                        goal = torch.from_numpy(goal).to(torch.float32)
-                        goals = torch.unsqueeze(goal, 0).to(device)
-                        tokenized_goals = nets['pointbert_encoder'](goals)
-                        goal_embed = nets['projection_head'](tokenized_goals)
-                        goal_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
+            #             # center and scale goal
+            #             goal = (goal - ctr) * 10.0
+            #             goal = torch.from_numpy(goal).to(torch.float32)
+            #             goals = torch.unsqueeze(goal, 0).to(device)
+            #             tokenized_goals = nets['pointbert_encoder'](goals)
+            #             goal_embed = nets['projection_head'](tokenized_goals)
+            #             goal_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
 
-                        # center and scale state
-                        state = (state - ctr) * 10.0
-                        state = torch.from_numpy(state).to(torch.float32)
-                        states = torch.unsqueeze(state, 0).to(device)
-                        tokenized_states = nets['pointbert_encoder'](states)
-                        pcl_embed = nets['projection_head'](tokenized_states) 
-                        pointcloud_features = pcl_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
+            #             # center and scale state
+            #             state = (state - ctr) * 10.0
+            #             state = torch.from_numpy(state).to(torch.float32)
+            #             states = torch.unsqueeze(state, 0).to(device)
+            #             tokenized_states = nets['pointbert_encoder'](states)
+            #             pcl_embed = nets['projection_head'](tokenized_states) 
+            #             pointcloud_features = pcl_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
 
-                        # get the previous action
-                        if s_idx == 0:
-                            pos = np.array([0.6, 0.0, 0.165, 0.0, 0.05])
-                        else:
-                            pos = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/action' + str(s_idx-1) + '.npy')
+            #             # get the previous action
+            #             if s_idx == 0:
+            #                 pos = np.array([0.6, 0.0, 0.165, 0.0, 0.05])
+            #             else:
+            #                 pos = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/action' + str(s_idx-1) + '.npy')
                         
-                        # normalize and scale action
-                        a_mins5d = np.array([0.56, -0.062, 0.125, -90, 0.005])
-                        a_maxs5d = np.array([0.7, 0.062, 0.165, 90, 0.05])
-                        pos = (pos - a_mins5d) / (a_maxs5d - a_mins5d)
-                        pos = pos * 2.0 - 1.0
-                        pos = np.concatenate((pos, np.array([-1.])), axis=0)
-                        nagent_pos = torch.from_numpy(pos).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
+            #             # normalize and scale action
+            #             a_mins5d = np.array([0.56, -0.062, 0.125, -90, 0.005])
+            #             a_maxs5d = np.array([0.7, 0.062, 0.165, 90, 0.05])
+            #             pos = (pos - a_mins5d) / (a_maxs5d - a_mins5d)
+            #             pos = pos * 2.0 - 1.0
+            #             pos = np.concatenate((pos, np.array([-1.])), axis=0)
+            #             nagent_pos = torch.from_numpy(pos).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
 
-                        # generate conditioning vector
-                        obs_features = torch.cat([pointcloud_features, nagent_pos, goal_features],dim=-1)
+            #             # generate conditioning vector
+            #             obs_features = torch.cat([pointcloud_features, nagent_pos, goal_features],dim=-1)
 
-                        # concatenate vision feature and low-dim obs
-                        # obs_features = torch.cat([image_features, nagent_pos], dim=-1)
-                        obs_cond = obs_features.flatten(start_dim=1)
+            #             # concatenate vision feature and low-dim obs
+            #             # obs_features = torch.cat([image_features, nagent_pos], dim=-1)
+            #             obs_cond = obs_features.flatten(start_dim=1)
 
-                        # initialize action from Guassian noise NOTE: swapped batch to 1 for testing here
-                        noisy_action = torch.randn(
-                            (1, pred_horizon, action_dim), device=device)
-                        naction = noisy_action
+            #             # initialize action from Guassian noise NOTE: swapped batch to 1 for testing here
+            #             noisy_action = torch.randn(
+            #                 (1, pred_horizon, action_dim), device=device)
+            #             naction = noisy_action
 
-                        # init scheduler
-                        noise_scheduler.set_timesteps(num_diffusion_iters)
+            #             # init scheduler
+            #             noise_scheduler.set_timesteps(num_diffusion_iters)
 
-                        for k in noise_scheduler.timesteps:
-                            # predict noise
-                            noise_pred = noise_pred_net(
-                                sample=naction,
-                                timestep=k,
-                                global_cond=obs_cond
-                            )
+            #             for k in noise_scheduler.timesteps:
+            #                 # predict noise
+            #                 noise_pred = noise_pred_net(
+            #                     sample=naction,
+            #                     timestep=k,
+            #                     global_cond=obs_cond
+            #                 )
 
-                            # inverse diffusion step (remove noise)
-                            naction = noise_scheduler.step(
-                                model_output=noise_pred,
-                                timestep=k,
-                                sample=naction
-                            ).prev_sample
+            #                 # inverse diffusion step (remove noise)
+            #                 naction = noise_scheduler.step(
+            #                     model_output=noise_pred,
+            #                     timestep=k,
+            #                     sample=naction
+            #                 ).prev_sample
 
-                        # unnormalize action
-                        naction = naction.detach().to('cpu').numpy()
-                        # (B, pred_horizon, action_dim)
-                        naction = naction[0]
-                        print("\n\n\nNorm Action Prediction: ", naction)
-                        action_pred = (naction[:,0:5] + 1.0) / 2.0
-                        action_pred = action_pred * (a_maxs5d - a_mins5d) + a_mins5d
+            #             # unnormalize action
+            #             naction = naction.detach().to('cpu').numpy()
+            #             # (B, pred_horizon, action_dim)
+            #             naction = naction[0]
+            #             print("\n\n\nNorm Action Prediction: ", naction)
+            #             action_pred = (naction[:,0:5] + 1.0) / 2.0
+            #             action_pred = action_pred * (a_maxs5d - a_mins5d) + a_mins5d
                         
-                        # only take action_horizon number of actions
-                        action_horizon = 4
-                        start = obs_horizon - 1
-                        end = start + action_horizon
-                        diff_action = action_pred[start:end,:] # (4, 5)
+            #             # only take action_horizon number of actions
+            #             action_horizon = 4
+            #             start = obs_horizon - 1
+            #             end = start + action_horizon
+            #             diff_action = action_pred[start:end,:] # (4, 5)
                         
                         
 
-                        # get the ground truth 5 next actions
-                        gt_actions = []
-                        norm_actions = []
-                        for i in range(action_horizon):
-                            action = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/action' + str(i+s_idx) + '.npy')
-                            gt_actions.append(action)
+            #             # get the ground truth 5 next actions
+            #             gt_actions = []
+            #             norm_actions = []
+            #             for i in range(action_horizon):
+            #                 action = np.load(test_dataset_path + '/Discrete/Trajectory' + str(t) + '/action' + str(i+s_idx) + '.npy')
+            #                 gt_actions.append(action)
 
-                            # normalize and scale action
-                            a = (action - a_mins5d) / (a_maxs5d - a_mins5d)
-                            a = a * 2.0 - 1.0
-                            norm_actions.append(a)
+            #                 # normalize and scale action
+            #                 a = (action - a_mins5d) / (a_maxs5d - a_mins5d)
+            #                 a = a * 2.0 - 1.0
+            #                 norm_actions.append(a)
                         
-                        print("\nGround Truth Norm Actions: ", np.array(norm_actions))
-                        print("\n\nAction Sequence Prediction: ", diff_action)
-                        print("\nGround Truth Actions: ", np.array(gt_actions))
-                print("\n\n\n\n\n")
+            #             print("\nGround Truth Norm Actions: ", np.array(norm_actions))
+            #             print("\n\nAction Sequence Prediction: ", diff_action)
+            #             print("\nGround Truth Actions: ", np.array(gt_actions))
+            #     print("\n\n\n\n\n")
 
         tglobal.set_postfix(loss=np.mean(epoch_loss))
 

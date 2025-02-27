@@ -8,6 +8,10 @@ from PIL import Image
 from scipy.spatial.transform import Rotation
 
 # NOTE: updating for 7D actions with new fingertip tool for variable pot creation (final pcl is the goal)
+    # for this initial test - do no rotation augmentations
+    # for this initial test - do not wrap the rotations, just normalize based on global min/max
+    # 
+
 class ClayDataset(torch.utils.data.Dataset):
     def __init__(self, dataset_dir, pred_horizon, n_datapoints, n_raw_trajectories, center_action):
         """
@@ -54,9 +58,11 @@ class ClayDataset(torch.utils.data.Dataset):
         return norm_action
 
     def _normalize_action(self, action):
-        a_mins5d = np.array([0.56, -0.062, 0.125, -90, 0.005])
-        a_maxs5d = np.array([0.7, 0.062, 0.165, 90, 0.05])
-        norm_action = (action - a_mins5d) / (a_maxs5d - a_mins5d)
+        # mins = [0.5413, -0.04232, 0.1300, -360, -15, -90, 0.0005]
+        # maxs = [0.6700, 0.08500, 0.1560, 360, 130, 90, 0.005]
+        a_mins7d = np.array([0.5413, -0.04232, 0.1300, -360, -15, -90, 0.0005])
+        a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 360, 130, 90, 0.005])
+        norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
         norm_action = norm_action  * 2 - 1 # set to [-1, 1]
         return norm_action
     
@@ -99,7 +105,7 @@ class ClayDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         raw_traj_idx = int(idx // self.n_datapoints_per_trajectory) 
         # determine the rotation augmentation to apply
-        aug_rot = (idx % self.n_datapoints_per_trajectory) * self.aug_step
+        # aug_rot = (idx % self.n_datapoints_per_trajectory) * self.aug_step
         traj_path = self.dataset_dir + '/Trajectory' + str(raw_traj_idx)
 
         states = []
@@ -107,22 +113,20 @@ class ClayDataset(torch.utils.data.Dataset):
         centers = []
         j = 0
 
-        while exists(traj_path + '/state' + str(j) + '.npy'):  
+        while exists(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy'):  
             ctr = np.load(traj_path + '/pcl_center' + str(j) + '.npy')
-            s = np.load(traj_path + '/state' + str(j) + '.npy')
-            s_rot = self._rotate_pcl(s, ctr, aug_rot)
-            s_rot_scaled = self._center_pcl(s_rot, ctr)
+            s = np.load(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy')
+            s_rot_scaled = self._center_pcl(s, ctr)
             states.append(s_rot_scaled)
 
             if j != 0:
                 # load unnormalized action
-                a = np.load(traj_path + '/action' + str(j-1) + '.npy')
-                a_rot = self._rotate_action(a, ctr, aug_rot)
+                a = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
                 if self.center_action:
-                    a_scaled = self._center_normalize_action(a_rot, ctr)
+                    a_scaled = self._center_normalize_action(a, ctr)
                     centers.append(ctr)
                 else:
-                    a_scaled = self._normalize_action(a_rot)
+                    a_scaled = self._normalize_action(a)
                     centers.append(ctr)
                 actions.append(a_scaled)
             j+=1
@@ -132,9 +136,8 @@ class ClayDataset(torch.utils.data.Dataset):
         state = states[start_ts]
         
         # load uncentered goal
-        g = np.load(traj_path + '/new_goal_unnormalized.npy')
-        g_rot = self._rotate_pcl(g, centers[start_ts], aug_rot)
-        goal = self._center_pcl(g_rot, centers[start_ts])
+        g = np.load(traj_path + '/unnormalized_pointcloud' + str(j-1) + '.npy') # set the goal point cloud to be the last pcl in demo trajectory
+        goal = self._center_pcl(g, centers[start_ts])
 
         action = actions[start_ts:]
         action = np.stack(action, axis=0)
@@ -150,9 +153,9 @@ class ClayDataset(torch.utils.data.Dataset):
             obs_pos = actions[start_ts-1]
         else:
             if self.center_action:
-                obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.05]), centers[start_ts])
+                obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]), centers[start_ts])
             else:
-                obs_pos = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.05]))
+                obs_pos = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]))
 
         if action_len < self.pred_horizon:
             padded_action = np.zeros((self.pred_horizon, 5))
