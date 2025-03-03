@@ -44,7 +44,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     obs_horizon = 1
     B = 1
     pred_horizon = 4 
-    action_dim = 6
+    action_dim = 8
     num_diffusion_iters = 100
     noise_scheduler = DDPMScheduler(
         num_train_timesteps=num_diffusion_iters,
@@ -62,14 +62,14 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
     # define the action space limits for unnormalization
     if centered_action:
-        a_mins5d = np.array([-0.15, -0.15, -0.05, -90, 0.005])
-        a_maxs5d = np.array([0.15, 0.15, 0.05, 90, 0.05])
+        a_mins7d = np.array([-0.15, -0.15, -0.05, -90, 0.005])
+        a_maxs7d = np.array([0.15, 0.15, 0.05, 90, 0.05])
     else:
-        a_mins5d = np.array([0.56, -0.062, 0.125, -90, 0.005])
-        a_maxs5d = np.array([0.7, 0.062, 0.165, 90, 0.05])
+        a_mins7d = np.array([0.5413, -0.04232, 0.1300, -360, -15, -90, 0.0005])
+        a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 360, 130, 90, 0.005])
 
-    qpos = np.array([0.6, 0.0, 0.165, 0.0, 0.05])
-    qpos = (qpos - a_mins5d) / (a_maxs5d - a_mins5d)
+    qpos = np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04])
+    qpos = (qpos - a_mins7d) / (a_maxs7d - a_mins7d)
     qpos = qpos * 2.0 - 1.0
     qpos = np.concatenate((qpos, np.array([-1.])), axis=0)
     nagent_pos = torch.from_numpy(qpos).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
@@ -91,7 +91,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     noise_pred_net = noise_checkpoint['noise_pred_net'].to(device)
 
     # load in the goal
-    raw_goal = np.load('goals/' + goal_str + '.npy')
+    # raw_goal = np.load('goals/' + goal_str + '.npy')
+    raw_goal = '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory5/unnormalized_pointcloud22.npy'
 
     # define observation pose
     pose = fa.get_pose()
@@ -152,6 +153,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     with open(save_path + '/dist_metrics_0.txt', 'w') as f:
         f.write(str(dist_metrics))
 
+    iter = 1
     in_progress = True
     while in_progress:
         with torch.inference_mode():
@@ -203,11 +205,11 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
         end = time.time()
         planning_time_list.append(end-start)
 
-        # execute 4 actions before replanning
+        # execute N actions before replanning
         pred_action = naction[0]
-        termination_pred = pred_action[:,5]
-        action_pred = (pred_action[:,0:5] + 1.0) / 2.0
-        action_pred = action_pred * (a_maxs5d - a_mins5d) + a_mins5d
+        termination_pred = pred_action[:,7]
+        action_pred = (pred_action[:,0:7] + 1.0) / 2.0
+        action_pred = action_pred * (a_maxs7d - a_mins7d) + a_mins7d
         
         for j in range(action_pred.shape[0]):
             unnorm_a = action_pred[j,:]
@@ -216,14 +218,15 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             if centered_action:
                 unnorm_a[0:3] = unnorm_a[0:3] + ctr
             
-            goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], 0, 0, unnorm_a[3], unnorm_a[4])
+            goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], unnorm_a[3], unnorm_a[4], unnorm_a[5], unnorm_a[6])
             n_action+=1
 
             # wait here
             time.sleep(3)
 
             # open the gripper
-            fa.open_gripper(block=True)
+            # fa.open_gripper(block=True)
+            fa.goto_gripper(0.04, block=True)
 
             # move to observation pose
             pose.translation = observation_pose
@@ -239,10 +242,10 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             pointcloud = (unnorm_pcl - ctr) * 10
 
             # save the point clouds from each camera
-            o3d.io.write_point_cloud(save_path + '/cam2_pcl' + str(i*4 + j + 1) + '.ply', pc2)
-            o3d.io.write_point_cloud(save_path + '/cam3_pcl' + str(i*4 + j + 1) + '.ply', pc3)
-            o3d.io.write_point_cloud(save_path + '/cam4_pcl' + str(i*4 + j + 1) + '.ply', pc4)
-            o3d.io.write_point_cloud(save_path + '/cam5_pcl' + str(i*4 + j + 1) + '.ply', pc5)
+            o3d.io.write_point_cloud(save_path + '/cam2_pcl' + str(iter) + '.ply', pc2)
+            o3d.io.write_point_cloud(save_path + '/cam3_pcl' + str(iter) + '.ply', pc3)
+            o3d.io.write_point_cloud(save_path + '/cam4_pcl' + str(iter) + '.ply', pc4)
+            o3d.io.write_point_cloud(save_path + '/cam5_pcl' + str(iter) + '.ply', pc5)
 
             # center the goal based on the point cloud center
             numpy_goal = (raw_goal - ctr) * 10.0
@@ -259,12 +262,12 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             o3d.visualization.draw_geometries([pcl, goal_pcl])
 
             # save observation
-            np.save(save_path + '/pcl' + str(i*4 + j + 1) + '.npy', pointcloud)
-            np.save(save_path + '/center' + str(i*4 + j + 1) + '.npy', ctr)
-            cv2.imwrite(save_path + '/rgb2_state' + str(i*4 + j + 1) + '.jpg', rgb2)
-            cv2.imwrite(save_path + '/rgb3_state' + str(i*4 + j + 1) + '.jpg', rgb3)
-            cv2.imwrite(save_path + '/rgb4_state' + str(i*4 + j + 1) + '.jpg', rgb4)
-            cv2.imwrite(save_path + '/rgb5_state' + str(i*4 + j + 1) + '.jpg', rgb5)
+            np.save(save_path + '/pcl' + str(iter) + '.npy', pointcloud)
+            np.save(save_path + '/center' + str(iter) + '.npy', ctr)
+            cv2.imwrite(save_path + '/rgb2_state' + str(iter) + '.jpg', rgb2)
+            cv2.imwrite(save_path + '/rgb3_state' + str(iter) + '.jpg', rgb3)
+            cv2.imwrite(save_path + '/rgb4_state' + str(iter) + '.jpg', rgb4)
+            cv2.imwrite(save_path + '/rgb5_state' + str(iter) + '.jpg', rgb5)
 
             # get the distance metrics between the point cloud and goal
             dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goal),
@@ -279,6 +282,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             if terminate > 0:
                 in_progress = False
                 break
+
+            iter += 1
             
     # completed the experiment, send the message to the video recording loop
     done_queue.put("Done!")
@@ -322,8 +327,8 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # ---------------- Experimental Parameters to Define ----------------
     # -------------------------------------------------------------------
-    exp_num = 11
-    goal_shape = 'Line' 
+    exp_num = 1
+    goal_shape = 'pottery' 
     model_path = '/checkpoints/...' 
     centered_action = False
     # -------------------------------------------------------------------
@@ -352,6 +357,7 @@ if __name__ == '__main__':
     fa = FrankaArm()
     fa.reset_joints()
     fa.open_gripper()
+    fa.goto_gripper(0.04)
 
     # initialize the cameras
     cam2 = vis.CameraClass(2)
