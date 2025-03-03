@@ -156,6 +156,9 @@ class ClayDataset(torch.utils.data.Dataset):
                 obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]), centers[start_ts])
             else:
                 obs_pos = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]))
+        
+        # add padding to obs_pos of one 0 vector to make 8d
+        obs_pos = np.concatenate((obs_pos, np.zeros((1))), axis=0)
 
         if action_len < self.pred_horizon:
             padded_action = np.zeros((self.pred_horizon, 8))

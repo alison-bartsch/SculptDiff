@@ -75,7 +75,7 @@ class ConditionalResidualBlock1D(nn.Module):
             in_channels,
             out_channels,
             cond_dim,
-            kernel_size=3,
+            kernel_size=3, # NOTE: originally 3
             n_groups=8):
         super().__init__()
 
@@ -126,7 +126,7 @@ class ConditionalUnet1D(nn.Module):
         global_cond_dim,
         diffusion_step_embed_dim=256,
         down_dims=[256,512,1024],
-        kernel_size=5,
+        kernel_size=5, # NOTE: used to be 5
         n_groups=8
         ):
         """
@@ -242,7 +242,6 @@ class ConditionalUnet1D(nn.Module):
         for idx, (resnet, resnet2, downsample) in enumerate(self.down_modules):
             x = resnet(x, global_feature)
             x = resnet2(x, global_feature)
-            # print("\nx shape: ", x.shape)
             h.append(x)
             x = downsample(x)
 
@@ -253,7 +252,7 @@ class ConditionalUnet1D(nn.Module):
             x = torch.cat((x, h.pop()), dim=1)
             x = resnet(x, global_feature)
             x = resnet2(x, global_feature)
-            # x = upsample(x)
+            x = upsample(x) # NOTE: needed to comment out for original sculptdiff (if odd input size)
 
         x = self.final_conv(x)
 
