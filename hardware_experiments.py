@@ -329,7 +329,7 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/checkpoints/...' 
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_100as' 
     centered_action = False
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
