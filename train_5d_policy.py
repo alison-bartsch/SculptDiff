@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 from pointBERT.tools import builder
 from pointBERT.utils.config import cfg_from_yaml_file
 from embeddings import EncoderHead
-from test_dataset import ClayDataset
+from dataset5d import ClayDataset
 from os.path import join
 import os
 import numpy as np
@@ -14,7 +14,7 @@ import torch
 
 
 # exp name
-exp_name = 'pottery_12pred_with_augs'
+exp_name = 'pottery_5d_12horizon'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -80,9 +80,9 @@ noise_scheduler = DDPMScheduler(
 
 # define parameters
 pcl_feature_dim = 512
-lowdim_obs_dim = 8 
+lowdim_obs_dim = 6 
 obs_dim = 2*pcl_feature_dim + lowdim_obs_dim
-action_dim = 8
+action_dim = 6
 obs_horizon = 1
 
 # create network object

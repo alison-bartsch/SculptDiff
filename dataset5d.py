@@ -8,10 +8,6 @@ from PIL import Image
 from scipy.spatial.transform import Rotation
 
 # NOTE: updating for 7D actions with new fingertip tool for variable pot creation (final pcl is the goal)
-    # for this initial test - do no rotation augmentations
-    # for this initial test - do not wrap the rotations, just normalize based on global min/max
-    # 
-
 class ClayDataset(torch.utils.data.Dataset):
     def __init__(self, dataset_dir, pred_horizon, n_datapoints, n_raw_trajectories, center_action):
         """
@@ -58,11 +54,9 @@ class ClayDataset(torch.utils.data.Dataset):
         return norm_action
 
     def _normalize_action(self, action):
-        # mins = [0.5413, -0.04232, 0.1300, -360, -15, -90, 0.0005]
-        # maxs = [0.6700, 0.08500, 0.1560, 360, 130, 90, 0.005]
-        a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
-        a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
-        norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
+        a_mins5d = np.array([0.5413, -0.04232, 0.1300, -90, 0.0005])
+        a_maxs5d = np.array([0.6700, 0.08500, 0.1560, 90, 0.005])
+        norm_action = (action - a_mins5d) / (a_maxs5d - a_mins5d)
         norm_action = norm_action  * 2 - 1 # set to [-1, 1]
         return norm_action
     
@@ -87,23 +81,9 @@ class ClayDataset(torch.utils.data.Dataset):
         new_global_grasp = (center[0] + new_unit_circle_grasp[0], center[1] + new_unit_circle_grasp[1])
         x = new_global_grasp[0]
         y = new_global_grasp[1]
-        rz = action[5] + rot
-        rz_new = (rz + 90) % 180 - 90 # wrap rz
-
-        # convert to radians
-        r_x = math.radians(action[3])
-        r_y = math.radians(action[4])
-        z_rotation_change = math.radians(rot)
-
-        # calculate the new pitch and roll
-        rx_new = math.asin(math.cos(z_rotation_change)*math.sin(r_x) + math.sin(z_rotation_change)*math.cos(r_x)*math.sin(r_y))
-        ry_new = math.asin(math.cos(r_x)*math.sin(r_y))
-
-        # convert back to degrees
-        rx_new = math.degrees(rx_new)
-        ry_new = math.degrees(ry_new)
-
-        action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
+        rz = action[3] + rot
+        rz = self._wrap_rz(rz)
+        action_aug = np.array([x, y, action[2], rz, action[4]])
         return action_aug
     
     def _wrap_rz(self, original_rz):
@@ -137,9 +117,7 @@ class ClayDataset(torch.utils.data.Dataset):
 
             if j != 0:
                 # load unnormalized action
-                a = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
-                # fix the r_x scaling
-                a[3] = self._wrap_rz(a[3])
+                a = np.load(traj_path + '/action5d_unnormalized' + str(j-1) + '.npy')
                 a_rot = self._rotate_action(a, ctr, aug_rot)
                 if self.center_action:
                     a_scaled = self._center_normalize_action(a_rot, ctr)
@@ -157,7 +135,7 @@ class ClayDataset(torch.utils.data.Dataset):
         # load uncentered goal
         g = np.load(traj_path + '/unnormalized_pointcloud' + str(j-1) + '.npy') # set the goal point cloud to be the last pcl in demo trajectory
         g_rot = self._rotate_pcl(g, centers[start_ts], aug_rot)
-        goal = self._center_pcl(g, centers[start_ts])
+        goal = self._center_pcl(g_rot, centers[start_ts])
 
         action = actions[start_ts:]
         action = np.stack(action, axis=0)
@@ -173,15 +151,15 @@ class ClayDataset(torch.utils.data.Dataset):
             obs_pos = actions[start_ts-1]
         else:
             if self.center_action:
-                obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]), centers[start_ts])
+                obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.04]), centers[start_ts])
             else:
-                obs_pos = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]))
+                obs_pos = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.04]))
         
         # add padding to obs_pos of one 0 vector to make 8d
         obs_pos = np.concatenate((obs_pos, -1 * np.ones((1))), axis=0)
 
         if action_len < self.pred_horizon:
-            padded_action = np.zeros((self.pred_horizon, 8))
+            padded_action = np.zeros((self.pred_horizon, 6))
             padded_action[:action_len] = action
             for i in range(action_len, self.pred_horizon):
                 padded_action[i] = action[-1]
