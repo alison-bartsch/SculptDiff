@@ -43,7 +43,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     # define diffusion parameters
     obs_horizon = 1
     B = 1
-    pred_horizon = 4 
+    pred_horizon = 4
     action_dim = 8
     num_diffusion_iters = 100
     noise_scheduler = DDPMScheduler(
@@ -65,8 +65,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
         a_mins7d = np.array([-0.15, -0.15, -0.05, -90, 0.005])
         a_maxs7d = np.array([0.15, 0.15, 0.05, 90, 0.05])
     else:
-        a_mins7d = np.array([0.5413, -0.04232, 0.1300, -360, -15, -90, 0.0005])
-        a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 360, 130, 90, 0.005])
+        a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
+        a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
 
     qpos = np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04])
     qpos = (qpos - a_mins7d) / (a_maxs7d - a_mins7d)
@@ -92,7 +92,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
     # load in the goal
     # raw_goal = np.load('goals/' + goal_str + '.npy')
-    raw_goal = '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory5/unnormalized_pointcloud22.npy'
+    raw_goal = np.load('/home/alison/Clay_Data/Feb26_Human_Demos_Raw/pottery/Trajectory1/unnormalized_pointcloud26.npy')
+    # /home/alison/Clay_Data/Feb26_Human_Demos_Raw/pottery/Trajectory5
 
     # define observation pose
     pose = fa.get_pose()
@@ -112,7 +113,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     rgb4, _, pc4, _ = cam4._get_next_frame()
     rgb5, _, pc5, _ = cam5._get_next_frame()
 
-    unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds(pc2, pc3, pc4, pc5)
+    unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
     # center and scale pointcloud
     pointcloud = (unnorm_pcl - ctr) * 10
 
@@ -134,7 +135,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     goal_pcl = o3d.geometry.PointCloud()
     goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
     goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
-    o3d.visualization.draw_geometries([pcl, goal_pcl])
+    # o3d.visualization.draw_geometries([pcl, goal_pcl])
 
     # save observation
     np.save(save_path + '/pcl0.npy', pointcloud)
@@ -207,18 +208,23 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
         # execute N actions before replanning
         pred_action = naction[0]
+        print("\nPredicted action sequence: ", pred_action)
         termination_pred = pred_action[:,7]
+        print("\nTermination prediction: ", termination_pred)
         action_pred = (pred_action[:,0:7] + 1.0) / 2.0
         action_pred = action_pred * (a_maxs7d - a_mins7d) + a_mins7d
         
         for j in range(action_pred.shape[0]):
             unnorm_a = action_pred[j,:]
+            print("\nSingle-step action: ", unnorm_a)
             terminate = termination_pred[j]
 
             if centered_action:
                 unnorm_a[0:3] = unnorm_a[0:3] + ctr
             
-            goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], unnorm_a[3], unnorm_a[4], unnorm_a[5], unnorm_a[6])
+            # assert False
+            # goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], unnorm_a[3], unnorm_a[4], unnorm_a[5], unnorm_a[6])
+            goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], 0, 0, unnorm_a[5], unnorm_a[6])
             n_action+=1
 
             # wait here
@@ -237,7 +243,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             rgb3, _, pc3, _ = cam3._get_next_frame()
             rgb4, _, pc4, _ = cam4._get_next_frame()
             rgb5, _, pc5, _ = cam5._get_next_frame()
-            unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds(pc2, pc3, pc4, pc5)
+            unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
             # center and scale pointcloud
             pointcloud = (unnorm_pcl - ctr) * 10
 
@@ -259,7 +265,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             goal_pcl = o3d.geometry.PointCloud()
             goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
             goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
-            o3d.visualization.draw_geometries([pcl, goal_pcl])
+            # o3d.visualization.draw_geometries([pcl, goal_pcl])
 
             # save observation
             np.save(save_path + '/pcl' + str(iter) + '.npy', pointcloud)
@@ -275,7 +281,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
                             'HAUSDORFF': hausdorff(unnorm_pcl, raw_goal)}
 
             print("\nDists: ", dist_metrics)
-            with open(save_path + '/dist_metrics_' + str(i+1) + '.txt', 'w') as f:
+            with open(save_path + '/dist_metrics_' + str(iter) + '.txt', 'w') as f:
                 f.write(str(dist_metrics))
             
             # if that action was predicted to be the final action, then terminate the experiment
@@ -329,7 +335,7 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_100as' 
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_4pred_100as' 
     centered_action = False
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -377,11 +383,11 @@ if __name__ == '__main__':
     # initialize the 3D vision code
     pcl_vis = vis.Vision3D()    
 
-    # load in the goal and save to the experiment folder
-    goal = np.load('goals/' + goal_shape + '.npy')
-    # center goal
-    goal = (goal - np.mean(goal, axis=0)) * 10.0
-    np.save(exp_save + '/goal.npy', goal)
+    # # load in the goal and save to the experiment folder
+    # goal = np.load('goals/' + goal_shape + '.npy')
+    # # center goal
+    # goal = (goal - np.mean(goal, axis=0)) * 10.0
+    # np.save(exp_save + '/goal.npy', goal)
 
     # initialize the threads
     done_queue = queue.Queue()
