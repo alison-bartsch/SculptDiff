@@ -176,6 +176,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
 
             # concatenate vision feature and low-dim obs
+            print("\nNagent pos: ", nagent_pos)
             obs_features = torch.cat([pointcloud_features, nagent_pos, goalcloud_features],dim=-1)
             obs_cond = obs_features.flatten(start_dim=1)
 
