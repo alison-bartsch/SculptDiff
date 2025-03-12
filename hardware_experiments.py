@@ -43,7 +43,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     # define diffusion parameters
     obs_horizon = 1
     B = 1
-    pred_horizon = 4
+    pred_horizon = 12
+    execute_horizon = 8
     action_dim = 8
     num_diffusion_iters = 100
     noise_scheduler = DDPMScheduler(
@@ -214,7 +215,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
         action_pred = (pred_action[:,0:7] + 1.0) / 2.0
         action_pred = action_pred * (a_maxs7d - a_mins7d) + a_mins7d
         
-        for j in range(action_pred.shape[0]):
+        # for j in range(action_pred.shape[0]):
+        for j in range(execute_horizon):
             unnorm_a = action_pred[j,:]
             print("\nSingle-step action: ", unnorm_a)
             terminate = termination_pred[j]
@@ -338,7 +340,7 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_4pred_100as' 
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_with_augs' 
     centered_action = False
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
