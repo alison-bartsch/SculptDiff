@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 from pointBERT.tools import builder
 from pointBERT.utils.config import cfg_from_yaml_file
 from embeddings import EncoderHead
-from test_dataset import ClayDataset
+from test_dataset import ClayDataset, SubGoalClayDataset
 from os.path import join
 import os
 import numpy as np
@@ -14,7 +14,7 @@ import torch
 
 
 # exp name
-exp_name = 'test' # 'pottery_20pred_with_augs'
+exp_name = 'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -37,13 +37,14 @@ projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
 # define the dataloader
 n_datapoints = 2*1800 # the desired numer of datapoints after augmentation
 n_raw_trajectories = 5 # the number of raw datapoints
-pred_horizon = 20
+pred_horizon = 8 # 20
 num_epochs = 750
 target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
 dataset_path = '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
 # test_dataset_path = "ClayDemoDataset/" + str(target_shape) + "/Test" 
 center_actions = False
-dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
+# dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
+dataset = SubGoalClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions, subgoal_stepsize=5)
 dataloader = torch.utils.data.DataLoader(
     dataset,
     batch_size=8, # 64
