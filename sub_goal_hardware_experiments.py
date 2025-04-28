@@ -386,7 +386,15 @@ if __name__ == '__main__':
         f.write(str(exp_dict))
 
     # TODO: load in the list of autoregressively generated sub-goals
+    sub_goal_load_path = '/home/alison/Documents/GitHub/SculptDiff/subgoals/step' + str(sub_goal_step) + '/'
+    sub_goal_name = 'autoregressive_subgoal'
     sub_goal_list = []
+    i = 0
+    while os.path.exists(sub_goal_load_path + sub_goal_name + str(i) + '.npy'):
+        sub_goal = np.load(sub_goal_load_path + sub_goal_name + str(i) + '.npy')
+        sub_goal_list.append(sub_goal)
+        i += sub_goal_step
+    
 
     # initialize the robot and reset joints
     fa = FrankaArm()
