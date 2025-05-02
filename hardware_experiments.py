@@ -16,7 +16,7 @@ from scipy.spatial.transform import Rotation
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
 
-def calculate_intermediate_pose(final_pose, dist=0.1):
+def calculate_intermediate_pose(final_pose, dist=0.07):
     """
     Calculate an intermediate pose for the robot to move before executing the grasp.
     Specifically, find the position of the gripper at a distance of [dist] from the final pose
@@ -51,7 +51,7 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     pose.rotation = r.as_matrix()
     pose.translation = np.array([x, y, z])
 
-    intermediate_pose = calculate_intermediate_pose(pose)
+    intermediate_pose = calculate_intermediate_pose(pose.copy())
     fa.goto_pose(intermediate_pose)
 
     fa.goto_pose(pose)
@@ -366,7 +366,7 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # ---------------- Experimental Parameters to Define ----------------
     # -------------------------------------------------------------------
-    exp_num = 16
+    exp_num = 1
     goal_shape = 'pottery' 
     # model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_20pred_10dataset_with_augs' # NOTE: doesn't do very well
     # model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_with_augs' # works much better
