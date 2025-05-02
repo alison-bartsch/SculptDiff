@@ -60,14 +60,14 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     return intermediate_pose
 
 
-def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action):
+def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon):
     '''
     '''
     # define diffusion parameters
     obs_horizon = 1
     B = 1
-    pred_horizon = 12
-    execute_horizon = 8
+    # pred_horizon = 12
+    # execute_horizon = 8
     action_dim = 8
     num_diffusion_iters = 100
     noise_scheduler = DDPMScheduler(
@@ -116,8 +116,9 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
     # load in the goal
     # raw_goal = np.load('goals/' + goal_str + '.npy')
-    raw_goal = np.load('/home/alison/Clay_Data/Feb26_Human_Demos_Raw/pottery/Trajectory1/unnormalized_pointcloud26.npy')
+    # raw_goal = np.load('/home/alison/Clay_Data/Feb26_Human_Demos_Raw/pottery/Trajectory1/unnormalized_pointcloud26.npy')
     # /home/alison/Clay_Data/Feb26_Human_Demos_Raw/pottery/Trajectory5
+    raw_goal = np.load('/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory0/unnormalized_pointcloud64.npy')
 
     # define observation pose
     pose = fa.get_pose()
@@ -365,10 +366,14 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # ---------------- Experimental Parameters to Define ----------------
     # -------------------------------------------------------------------
-    exp_num = 1
+    exp_num = 16
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_with_augs' 
+    # model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_20pred_10dataset_with_augs' # NOTE: doesn't do very well
+    # model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_with_augs' # works much better
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_7datasetfixed_with_augs'
     centered_action = False
+    pred_horizon = 12 # 20 # 12
+    execute_horizon = 8
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -386,7 +391,9 @@ if __name__ == '__main__':
     # make the experiment dictionary with important information for the experiment run
     exp_dict = {'goal: ', goal_shape,
                 'model: ', model_path,
-                'centered_action: ', centered_action}
+                'centered_action: ', centered_action,
+                'pred_horizon: ', pred_horizon,
+                'execute_horizon: ', execute_horizon}
     
     with open(exp_save + '/experiment_params.txt', 'w') as f:
         f.write(str(exp_dict))
@@ -424,7 +431,7 @@ if __name__ == '__main__':
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, exp_save, done_queue))
 
     main_thread.start()
