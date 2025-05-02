@@ -16,12 +16,13 @@ from scipy.spatial.transform import Rotation
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
 
-def calculate_intermediate_pose(final_pose, dist=0.07):
+def calculate_intermediate_pose(final_pose, dist=0.05):
     """
     Calculate an intermediate pose for the robot to move before executing the grasp.
     Specifically, find the position of the gripper at a distance of [dist] from the final pose
     in the direction of the final_pose rotation.
     """
+    # NOTE: may want to add a positional offset towards the center of the clay???? to prevent wall sliding when too close
     final_position = final_pose.translation
     final_rotation = final_pose.rotation
     final_rotation = Rotation.from_matrix(final_rotation)
@@ -118,7 +119,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     # raw_goal = np.load('goals/' + goal_str + '.npy')
     # raw_goal = np.load('/home/alison/Clay_Data/Feb26_Human_Demos_Raw/pottery/Trajectory1/unnormalized_pointcloud26.npy')
     # /home/alison/Clay_Data/Feb26_Human_Demos_Raw/pottery/Trajectory5
-    raw_goal = np.load('/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory0/unnormalized_pointcloud64.npy')
+    # raw_goal = np.load('/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory0/unnormalized_pointcloud64.npy')
+    raw_goal = np.load('/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory2/unnormalized_pointcloud33.npy')
 
     # define observation pose
     pose = fa.get_pose()
@@ -140,7 +142,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
     unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
     # center and scale pointcloud
-    pointcloud = (unnorm_pcl - ctr) * 10
+    pointcloud = (unnorm_pcl.copy() - ctr) * 10
 
     # save the point clouds from each camera
     o3d.io.write_point_cloud(save_path + '/cam2_pcl0.ply', pc2)
@@ -149,7 +151,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     o3d.io.write_point_cloud(save_path + '/cam5_pcl0.ply', pc5)
 
     # center the goal based on the goal center
-    numpy_goal = (raw_goal - ctr) * 10.0
+    numpy_goal = (raw_goal.copy() - ctr) * 10.0
     # scale distance metric goal differently 
     dist_goal = numpy_goal.copy()
 
@@ -278,7 +280,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             rgb5, _, pc5, _ = cam5._get_next_frame()
             unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
             # center and scale pointcloud
-            pointcloud = (unnorm_pcl - ctr) * 10
+            pointcloud = (unnorm_pcl.copy() - ctr) * 10
 
             # save the point clouds from each camera
             o3d.io.write_point_cloud(save_path + '/cam2_pcl' + str(iter) + '.ply', pc2)
@@ -287,7 +289,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             o3d.io.write_point_cloud(save_path + '/cam5_pcl' + str(iter) + '.ply', pc5)
 
             # center the goal based on the point cloud center
-            numpy_goal = (raw_goal - ctr) * 10.0
+            numpy_goal = (raw_goal.copy() - ctr) * 10.0
             # scale distance metric goal differently 
             dist_goal = numpy_goal.copy()
 
@@ -370,10 +372,10 @@ if __name__ == '__main__':
     goal_shape = 'pottery' 
     # model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_20pred_10dataset_with_augs' # NOTE: doesn't do very well
     # model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_with_augs' # works much better
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_7datasetfixed_with_augs'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_16pred_7datasetfixed_with_augs'
     centered_action = False
-    pred_horizon = 12 # 20 # 12
-    execute_horizon = 8
+    pred_horizon = 16 # 20 # 12
+    execute_horizon = 16 # 8
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------

@@ -359,7 +359,7 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_horizon_3_test_global_center' 
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_horizon5_7datasetfixed_with_augs' 
     centered_action = False
     sub_goal_step = 5
     # -------------------------------------------------------------------
