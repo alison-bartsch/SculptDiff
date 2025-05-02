@@ -5,7 +5,8 @@ mins = np.ones(7) * 1000
 maxs = np.ones(7) * -1000
 
 for i in range(6):
-    traj_path = '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory' + str(i)
+    # traj_path = '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory' + str(i)
+    traj_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory' + str(i)
     j = 0
     while exists(traj_path + '/action7d_unnormalized' + str(j) + '.npy'):  
         action = np.load(traj_path + '/action7d_unnormalized' + str(j) + '.npy')

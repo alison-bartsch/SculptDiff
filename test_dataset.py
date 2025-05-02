@@ -127,7 +127,6 @@ class ClayDataset(torch.utils.data.Dataset):
         centers = []
         j = 0
 
-
         while exists(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy'):  
             ctr = np.load(traj_path + '/pcl_center' + str(j) + '.npy')
             s = np.load(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy')
@@ -139,7 +138,8 @@ class ClayDataset(torch.utils.data.Dataset):
                 # load unnormalized action
                 a = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
                 # fix the r_x scaling
-                a[3] = self._wrap_rz(a[3])
+                # a[3] = self._wrap_rz(a[3])
+                # NOTE: need to go through and verify the action is correct (i.e. wrapping rz is flipping rx, etc.)
                 a_rot = self._rotate_action(a, ctr, aug_rot)
                 if self.center_action:
                     a_scaled = self._center_normalize_action(a_rot, ctr)
@@ -337,7 +337,7 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
                 # load unnormalized action
                 a = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
                 # fix the r_x scaling
-                a[3] = self._wrap_rz(a[3])
+                # a[3] = self._wrap_rz(a[3])
                 a_rot = self._rotate_action(a, self.center, aug_rot)
                 if self.center_action:
                     a_scaled = self._center_normalize_action(a_rot, self.center)

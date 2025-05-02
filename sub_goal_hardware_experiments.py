@@ -359,7 +359,7 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_with_augs' 
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_horizon_3_test_global_center' 
     centered_action = False
     sub_goal_step = 5
     # -------------------------------------------------------------------
@@ -395,7 +395,6 @@ if __name__ == '__main__':
         sub_goal_list.append(sub_goal)
         i += sub_goal_step
     
-
     # initialize the robot and reset joints
     fa = FrankaArm()
     fa.reset_joints()
