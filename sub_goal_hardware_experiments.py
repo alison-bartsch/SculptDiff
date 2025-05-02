@@ -15,27 +15,70 @@ from pointBERT.utils.config import cfg_from_yaml_file
 from scipy.spatial.transform import Rotation
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
+def calculate_intermediate_pose(final_pose, dist=0.05):
+    """
+    Calculate an intermediate pose for the robot to move before executing the grasp.
+    Specifically, find the position of the gripper at a distance of [dist] from the final pose
+    in the direction of the final_pose rotation.
+    """
+    # NOTE: may want to add a positional offset towards the center of the clay???? to prevent wall sliding when too close
+    final_position = final_pose.translation
+    final_rotation = final_pose.rotation
+    final_rotation = Rotation.from_matrix(final_rotation)
+    final_rotation = final_rotation.as_matrix()
+    final_rotation = np.array(final_rotation)
+    final_rotation = final_rotation[:, 2]
+    intermediate_position = final_position - dist * final_rotation
+    intermediate_pose = final_pose
+    intermediate_pose.translation = intermediate_position
+    return intermediate_pose
+
 
 def goto_grasp(fa, x, y, z, rx, ry, rz, d):
-	"""
-	Parameterize a grasp action by the position [x,y,z] Euler angle rotation [rx,ry,rz], and width [d] of the gripper.
-	This function was designed to be used for clay moulding, but in practice can be applied to any task.
+    """
+    Parameterize a grasp action by the position [x,y,z] Euler angle rotation [rx,ry,rz], and width [d] of the gripper.
+    This function was designed to be used for clay moulding, but in practice can be applied to any task.
 
-	:param fa:  franka robot class instantiation
-	"""
-	pose = fa.get_pose()
-	starting_rot = pose.rotation
-	orig = Rotation.from_matrix(starting_rot)
-	orig_euler = orig.as_euler('xyz', degrees=True)
-	rot_vec = np.array([rx, ry, rz])
-	new_euler = orig_euler + rot_vec
-	r = Rotation.from_euler('xyz', new_euler, degrees=True)
-	pose.rotation = r.as_matrix()
-	pose.translation = np.array([x, y, z])
+    :param fa:  franka robot class instantiation
+    """
+    pose = fa.get_pose()
+    starting_rot = pose.rotation
+    orig = Rotation.from_matrix(starting_rot)
+    orig_euler = orig.as_euler('xyz', degrees=True)
+    rot_vec = np.array([rx, ry, rz])
+    new_euler = orig_euler + rot_vec
+    r = Rotation.from_euler('xyz', new_euler, degrees=True)
+    pose.rotation = r.as_matrix()
+    pose.translation = np.array([x, y, z])
 
-	fa.goto_pose(pose)
-	fa.goto_gripper(d, force=60.0)
-	time.sleep(3)
+    intermediate_pose = calculate_intermediate_pose(pose.copy())
+    fa.goto_pose(intermediate_pose)
+
+    fa.goto_pose(pose)
+    fa.goto_gripper(d, force=60.0)
+    time.sleep(3)
+    return intermediate_pose
+
+# def goto_grasp(fa, x, y, z, rx, ry, rz, d):
+# 	"""
+# 	Parameterize a grasp action by the position [x,y,z] Euler angle rotation [rx,ry,rz], and width [d] of the gripper.
+# 	This function was designed to be used for clay moulding, but in practice can be applied to any task.
+
+# 	:param fa:  franka robot class instantiation
+# 	"""
+# 	pose = fa.get_pose()
+# 	starting_rot = pose.rotation
+# 	orig = Rotation.from_matrix(starting_rot)
+# 	orig_euler = orig.as_euler('xyz', degrees=True)
+# 	rot_vec = np.array([rx, ry, rz])
+# 	new_euler = orig_euler + rot_vec
+# 	r = Rotation.from_euler('xyz', new_euler, degrees=True)
+# 	pose.rotation = r.as_matrix()
+# 	pose.translation = np.array([x, y, z])
+
+# 	fa.goto_pose(pose)
+# 	fa.goto_gripper(d, force=60.0)
+# 	time.sleep(3)
 
 def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, sub_goal_step, sub_goal_list):
     '''
@@ -246,8 +289,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             # update nagent_pos to be the new position
             nagent_pos = torch.from_numpy(pred_action[j]).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
             
-            # assert False
-            goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], unnorm_a[3], unnorm_a[4], unnorm_a[5], unnorm_a[6])
+            intermediate_pose = goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], unnorm_a[3], unnorm_a[4], unnorm_a[5], unnorm_a[6])
             # goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], 0, 0, unnorm_a[5], unnorm_a[6])
             n_action+=1
 
@@ -257,6 +299,9 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             # open the gripper
             # fa.open_gripper(block=True)
             fa.goto_gripper(0.04, block=True)
+
+            # move to intermediate_pose
+            fa.goto_pose(intermediate_pose)
 
             # move to observation pose
             pose.translation = observation_pose
