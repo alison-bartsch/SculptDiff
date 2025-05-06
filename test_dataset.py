@@ -318,14 +318,6 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
         centers = []
         j = 0
 
-        # TODO: make updates to apply to sub goal diffusion policy
-            # need to have the variable of subgoal_stepsize
-            # need to pre-build the indexing dictionary
-                # step along trajectory with subgoal_stepsize from randomly initialized start point
-            # action prediction horizon will always be subgoal_stepsize
-            # 
-
-
         while exists(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy'):  
             # ctr = np.load(traj_path + '/pcl_center' + str(j) + '.npy') # NOTE: switch to global centering
             s = np.load(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy')
@@ -336,8 +328,6 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
             if j != 0:
                 # load unnormalized action
                 a = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
-                # fix the r_x scaling
-                # a[3] = self._wrap_rz(a[3])
                 a_rot = self._rotate_action(a, self.center, aug_rot)
                 if self.center_action:
                     a_scaled = self._center_normalize_action(a_rot, self.center)
@@ -350,21 +340,16 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
 
         # episode_len = len(actions)
         full_episode_len = len(actions)
-        start_ts = np.random.choice(full_episode_len - self.subgoal_stepsize)
-        state = states[start_ts]
-        
-        # load uncentered goal
-        g = np.load(traj_path + '/unnormalized_pointcloud' + str(start_ts + self.subgoal_stepsize) + '.npy') # set the goal point cloud to be the last pcl in demo trajectory
-        g_rot = self._rotate_pcl(g, centers[start_ts], aug_rot)
-        goal = self._center_pcl(g_rot, centers[start_ts])
-
+        start_ts = np.random.choice(full_episode_len - self.subgoal_stepsize - 1)
         full_action_len = full_episode_len - start_ts
 
         # action = actions[start_ts:]
-        if full_action_len >= self.subgoal_stepsize:
-            action = actions[start_ts:start_ts + self.subgoal_stepsize]
+        if full_action_len >= self.pred_horizon:
+            action = actions[start_ts:start_ts + self.pred_horizon]
+            state_list = states[start_ts:(start_ts + self.pred_horizon + self.subgoal_stepsize):self.subgoal_stepsize]
         else:
             action = actions[start_ts:]
+            state_list = states[start_ts::self.subgoal_stepsize]
 
         action_len = len(action)
         action = np.stack(action, axis=0)
@@ -385,23 +370,27 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
         # add padding to obs_pos of one 0 vector to make 8d
         obs_pos = np.concatenate((obs_pos, -1 * np.ones((1))), axis=0)
 
+        states_seq_size = int((self.pred_horizon + self.subgoal_stepsize) / self.subgoal_stepsize)
+
         if action_len < self.pred_horizon:
             padded_action = np.zeros((self.pred_horizon, 8))
             padded_action[:action_len] = action
             for i in range(action_len, self.pred_horizon):
                 padded_action[i] = action[-1]
+
+            padded_states = np.zeros((states_seq_size, 2048, 3))
+            padded_states[:len(state_list)] = np.stack(state_list, axis=0)
         else:
             padded_action = action[:self.pred_horizon]
+            padded_states = np.stack(state_list, axis=0)
 
         # construct observations
-        state_data = torch.from_numpy(state)
-        goal_data = torch.from_numpy(goal).float()
+        padded_states_data = torch.from_numpy(padded_states).float()
         action_data = torch.from_numpy(padded_action).float()
         obs_pos_data = torch.from_numpy(obs_pos).float()
 
         nsample = dict()
-        nsample['pointcloud'] = state_data
-        nsample['goal'] = goal_data
+        nsample['pcl_seq'] = padded_states_data
         nsample['action'] = action_data
         nsample['agent_pos'] = obs_pos_data
         return nsample

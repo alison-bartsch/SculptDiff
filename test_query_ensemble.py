@@ -7,7 +7,9 @@ import queue
 import threading
 import numpy as np
 import open3d as o3d
+from tqdm import tqdm
 from pcl_utils import *
+from probabilistic_utils import *
 from pointBERT.tools import builder
 from pointBERT.utils.config import cfg_from_yaml_file
 from scipy.spatial.transform import Rotation
@@ -43,12 +45,12 @@ def center_pcl(pcl, center):
     return centered_pcl
 
 # define model checkpoint directory
-ckpt_dir = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_with_augs'
+ckpt_dir = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_16pred_7datasetfixed_with_augs'
 
 # define diffusion parameters
 obs_horizon = 1
 B = 1
-pred_horizon = 12 
+pred_horizon = 16
 action_dim = 8
 num_diffusion_iters = 100
 noise_scheduler = DDPMScheduler(
@@ -93,24 +95,27 @@ noise_checkpoint = torch.load(ckpt_dir + '/noise_pred_best_checkpoint', map_loca
 noise_pred_net = noise_checkpoint['noise_pred_net'].to(device)
 
 # load in the goal
-raw_goal = np.load('/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory5/unnormalized_pointcloud22.npy')
+# raw_goal = np.load('/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory2/unnormalized_pointcloud33.npy')
+raw_goal = np.load('/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory3/unnormalized_pointcloud25.npy')
 
 # load in the current state observation
-raw_state = np.load('/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory5/unnormalized_pointcloud9.npy')
+# raw_state = np.load('/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory2/unnormalized_pointcloud15.npy')
+raw_state = np.load('/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory3/unnormalized_pointcloud5.npy')
 
 # load in the current state center
-center = np.load('/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory5/pcl_center9.npy')
-starting_action_idx = 9
+# center = np.load('/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory2/pcl_center15.npy')
+center = np.load('/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory3/pcl_center5.npy')
+starting_action_idx = 5
 
 if starting_action_idx != 0:
-    prev_action = np.load('/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory5/action7d_unnormalized' + str(starting_action_idx - 2) + '.npy')
+    prev_action = np.load('/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory2/action7d_unnormalized' + str(starting_action_idx - 1) + '.npy')
     prev_action[3] = (prev_action[3] + 90) % 180 - 90
     prev_action = (prev_action - a_mins7d) / (a_maxs7d - a_mins7d)
     prev_action = prev_action * 2.0 - 1.0
     prev_action = np.concatenate((prev_action, np.array([-1.])), axis=0)
     nagent_pos = torch.from_numpy(prev_action).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
 
-generated_actions = {0 : [], 1 : [], 2 : [], 3 : [], 4 : [], 5 : [], 6 : [], 7 : [], 8 : [], 9 : [], 10 : [], 11 : []}
+generated_actions = {0 : [], 1 : [], 2 : [], 3 : [], 4 : [], 5 : [], 6 : [], 7 : [], 8 : [], 9 : [], 10 : [], 11 : [], 12 : [], 13 : [], 14 : [], 15 : []}
 
 # process state 
 centered_state = center_pcl(raw_state, center)
@@ -139,7 +144,7 @@ obs_features = torch.cat([pointcloud_features, nagent_pos, goalcloud_features],d
 obs_cond = obs_features.flatten(start_dim=1)
 
 # generate actions 10x to see variance better
-for run in range(20):
+for run in tqdm(range(40)):
     # initialize action from Guassian noise
     noisy_action = torch.randn(
         (B, pred_horizon, action_dim), device=device)
@@ -172,11 +177,50 @@ for run in range(20):
         unnorm_action = unnormalize_action(action)
         generated_actions[i].append(unnorm_action)
 
+# # ----- testing probailistic prediction visualziation -----
+# full_traj = np.zeros((20*pred_horizon, 7))
+# for l in range(20*pred_horizon):
+#     full_traj[l,:] = generated_actions[l % pred_horizon][l // pred_horizon]
+# full_traj = np.array(full_traj)
+# # fit a 7D Gaussian to the generated actions
+# mean, cov = fit_7D_gaussian(full_traj)
+# print("\n\n\n--------- Full Trajectory ---------")
+# print("\nMean: ", mean)
+# print("\nCov: ", cov)
+# # plot the 7D Gaussian
+# plot_7D_gaussian(mean, cov, num_samples=1000, data=full_traj)
+
+
+# # ------ generate probability distributions of each prediction & ground truth action ------
+# for i in range(20):
+#     traj = []
+#     raw_traj = []
+#     for l in range(pred_horizon):
+#         traj.append(generated_actions[l][i])
+#         raw_action = np.load('/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory5/action7d_unnormalized' + str(starting_action_idx - 1 + l) + '.npy')
+#         raw_traj.append(raw_action)
+#     traj = np.array(traj)
+#     raw_traj = np.array(raw_traj)
+#     # fit a 7D Gaussian to the generated actions
+#     mean, cov = fit_7D_gaussian(traj)
+#     plot_7D_gaussian(mean, cov, num_samples=1000)
+#     print("\n\n\n--------- Trajectory ", i, "---------")
+#     print("\nMean: ", mean)
+#     print("\nCov: ", cov)
+#     mean_raw, cov_raw = fit_7D_gaussian(raw_traj)
+#     plot_7D_gaussian(mean_raw, cov_raw, num_samples=1000)
+#     print("\nMean Raw: ", mean_raw)
+#     print("\nCov Raw: ", cov_raw)
+
+# assert False
+
+traj_vis_seq = []
+
 for k in range(pred_horizon):
     # compare the variance between generated actions with different rotation augmentations applied!
     # load in the g.t. action
-    raw_action = np.load('/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory5/action7d_unnormalized' + str(starting_action_idx - 1 + k) + '.npy')
-    raw_action[3] = (raw_action[3] + 90) % 180 - 90
+    raw_action = np.load('/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory2/action7d_unnormalized' + str(starting_action_idx - 1 + k) + '.npy')
+    # raw_action[3] = (raw_action[3] + 90) % 180 - 90
     print("\n\n\n--------- k = ", k, "---------")
     print("\nGround Truth Action: ", raw_action)
     print("\nMean Generated Action: ", np.mean(generated_actions[k], axis=0))
@@ -196,17 +240,34 @@ for k in range(pred_horizon):
     rectangle_o3d.points = o3d.utility.Vector3dVector(rectangle)
     rectangle_o3d.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,1,0]), (len(rectangle),1)))
     action_vis_list = [rectangle_o3d, pcl_rot_o3d]
+    traj_vis_seq.append(rectangle_o3d)
     for gen_action in generated_actions[k]:
         rectangle_gen = create_gripper_rectangle(gen_action)
         rectangle_gen_o3d = o3d.geometry.PointCloud()
         rectangle_gen_o3d.points = o3d.utility.Vector3dVector(rectangle_gen)
         rectangle_gen_o3d.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(rectangle_gen),1)))
         action_vis_list.append(rectangle_gen_o3d)
+    mean_action = np.mean(generated_actions[k], axis=0)
+    rectangle_mean = create_gripper_rectangle(mean_action)
+    rectangle_mean_o3d = o3d.geometry.PointCloud()
+    rectangle_mean_o3d.points = o3d.utility.Vector3dVector(rectangle_mean)
+    rectangle_mean_o3d.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(rectangle_mean),1)))
+    action_vis_list.append(rectangle_mean_o3d)
     o3d.visualization.draw_geometries(action_vis_list)
-
+    traj_vis_seq.append(rectangle_mean_o3d)
 
     for axes in high_var_axes:
         print("\nHigh Variance Axis: ", axes)
         # round the values to 3 decimal places
         axes_vals = [round(action[axes], 3) for action in generated_actions[k]]
         print("Axes Vals: ", axes_vals)
+
+traj_vis_seq.append(pcl_rot_o3d)
+o3d.visualization.draw_geometries(traj_vis_seq)
+
+
+
+# NOTES:   
+    # we want to get prediction stats for each action individually, and for the whole action prediction horizon
+    # if order doesn't matter, what is the similarity between predictions?
+    # treat each predicted trajectory as a distribution, and compare the distributions

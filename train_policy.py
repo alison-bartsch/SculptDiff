@@ -14,7 +14,7 @@ import torch
 
 
 # exp name
-exp_name = 'pottery_16pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
+exp_name = 'pottery_8pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -37,7 +37,7 @@ projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
 # define the dataloader
 n_datapoints = 2520 # 2*2*1800 # the desired numer of datapoints after augmentation
 n_raw_trajectories = 7 # the number of raw datapoints
-pred_horizon = 16 # 12 # 8 # 20
+pred_horizon = 8 # 12 # 8 # 20
 num_epochs = 750
 target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
 dataset_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery' # '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
