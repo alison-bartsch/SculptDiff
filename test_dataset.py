@@ -2,7 +2,7 @@ import math
 import torch
 import json
 import numpy as np
-import open3d as o3d 
+# import open3d as o3d 
 from os.path import exists
 from PIL import Image
 from scipy.spatial.transform import Rotation

@@ -1,6 +1,6 @@
-import os
-import cv2
-import time
+# import os
+# import cv2
+# import time
 import math
 import torch
 import queue
@@ -82,7 +82,7 @@ def rotate_action(action, center, rot):
     return action_aug
 
 # TODO: visualization script iterating through pottery demonstrations while visualizing each grasp action overlaid
-dataset_dir = '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery'
+dataset_dir = '/home/acar/Clay_Demos/Pottery_Mar24/'
 
 for i in range(32):
     state_path = dataset_dir + '/Trajectory0/unnormalized_pointcloud' + str(i) + '.npy'
