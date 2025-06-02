@@ -1,0 +1,1 @@
+{False, 'pottery', '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_16pred_7datasetfixed_with_augs', 'pred_horizon: ', 'goal: ', 'execute_horizon: ', 'model: ', 16, 'centered_action: '}
