@@ -1,0 +1,1 @@
+{False, '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_3_pcl_seq_12pred_7datasetfixed_with_augs', 'centered_action: ', 3, 'model: ', 'sub_goal_step: ', 'pottery', 'goal: '}
