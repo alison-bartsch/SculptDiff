@@ -203,14 +203,15 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     in_progress = True
     # while in_progress:
     # for sub_goal in sub_goal_list:
-    for step in range(len(sub_goal_list)):
-        raw_goals = sub_goal_list[step]
+    # for step in range(len(sub_goal_list)):
+    for raw_goals in sub_goal_list:
+        # raw_goals = sub_goal_list[step]
         # center the goal based on the goal center
         numpy_goal = (raw_goals[0] - ctr) * 10.0
         # scale distance metric goal differently 
         dist_goal = numpy_goal.copy()
 
-        if step == 0:
+        if iter == 1:
             # get the distance metrics between the point cloud and goal
             dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goals[0]),
                             'EMD': emd(unnorm_pcl, raw_goals[0]),
@@ -225,6 +226,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             # pass the point cloud through Point-BERT to get the latent representation
             state = torch.from_numpy(pointcloud).to(torch.float32)
             states = torch.unsqueeze(state, 0).to(device)
+            print("states shape: ", states.shape)
             tokenized_states = pointbert(states)
             pcl_embed = projection_head(tokenized_states)
             pointcloud_features = pcl_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
@@ -232,11 +234,14 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             obs_list = [nagent_pos, pointcloud_features]
 
             # pass the goal cloud through Point-BERT and projection head
-            for subgoal in sub_goal_list:
+            for subgoal in raw_goals:
                 np_goal = (subgoal - ctr) * 10.0
                 goal = np_goal.copy()
                 goal = torch.from_numpy(goal).to(torch.float32)
+                print("goal shape: ", goal.shape)
                 goals = torch.unsqueeze(goal, 0).to(device)
+                print("goal shape: ", goals.shape)
+                assert False
                 tokenized_goals = pointbert(goals)
                 goal_embed = projection_head(tokenized_goals)
                 goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
