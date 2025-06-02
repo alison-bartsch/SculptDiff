@@ -88,7 +88,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     B = 1
     pred_horizon = 12
     subgoal_stepsize = 3
-    execute_horizon = sub_goal_step
+    execute_horizon = 6 # sub_goal_step
     action_dim = 8
     num_diffusion_iters = 100
     noise_scheduler = DDPMScheduler(
@@ -238,10 +238,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
                 np_goal = (subgoal - ctr) * 10.0
                 goal = np_goal.copy()
                 goal = torch.from_numpy(goal).to(torch.float32)
-                print("goal shape: ", goal.shape)
                 goals = torch.unsqueeze(goal, 0).to(device)
-                print("goal shape: ", goals.shape)
-                assert False
                 tokenized_goals = pointbert(goals)
                 goal_embed = projection_head(tokenized_goals)
                 goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
@@ -423,19 +420,19 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
 
-    exp_save = 'Experiments/Exp' + str(exp_num)
+    exp_save = 'Experiments/Subgoal_Exp' + str(exp_num)
 
     # check to make sure the experiment number is not already in use, if it is, increment the number to ensure no save overwrites
     while os.path.exists(exp_save):
         exp_num += 1
-        exp_save = 'Experiments/Exp' + str(exp_num)
+        exp_save = 'Experiments/Subgoal_Exp' + str(exp_num)
 
     # make the experiment folder
     os.mkdir(exp_save)
 
     # make the experiment folder for the video save
-    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/Exp' + str(exp_num))
-    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/Exp' + str(exp_num)
+    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/Subgoal_Exp' + str(exp_num))
+    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/Subgoal_Exp' + str(exp_num)
 
     # make the experiment dictionary with important information for the experiment run
     exp_dict = {'goal: ', goal_shape,
