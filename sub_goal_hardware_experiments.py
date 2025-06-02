@@ -288,7 +288,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             unnorm_a = action_pred[j,:]
             print("\nSingle-step action: ", unnorm_a)
             terminate = termination_pred[j]
-
+ 
             if centered_action:
                 unnorm_a[0:3] = unnorm_a[0:3] + ctr
 
@@ -428,6 +428,10 @@ if __name__ == '__main__':
     # make the experiment folder
     os.mkdir(exp_save)
 
+    # make the experiment folder for the video save
+    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/Exp' + str(exp_num))
+    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/Exp' + str(exp_num)
+
     # make the experiment dictionary with important information for the experiment run
     exp_dict = {'goal: ', goal_shape,
                 'model: ', model_path,
@@ -493,7 +497,7 @@ if __name__ == '__main__':
     done_queue = queue.Queue()
 
     main_thread = threading.Thread(target=experiment_loop, args=(fa, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, sub_goal_step, nested_sub_goal_list))
-    video_thread = threading.Thread(target=video_loop, args=(pipeline, exp_save, done_queue))
+    video_thread = threading.Thread(target=video_loop, args=(pipeline, video_save_path, done_queue))
 
     main_thread.start()
     video_thread.start()
