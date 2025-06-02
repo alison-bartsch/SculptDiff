@@ -14,7 +14,7 @@ import torch
 
 
 # exp name
-exp_name = 'pottery_8pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
+exp_name = 'pottery_separate_projection_embeddings_12pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -25,19 +25,23 @@ device = torch.device('cuda')
 config = cfg_from_yaml_file('pointBERT/cfgs/PointTransformer.yaml')
 model_config = config.model
 pointbert_encoder = builder.model_builder(model_config)
+# pointbert_encoder2 = builder.model_builder(model_config)
 weights_path = 'pointBERT/point-BERT-weights/Point-BERT.pth'
 pointbert_encoder.load_model_from_ckpt(weights_path)
 pointbert_encoder.to(device)
+# pointbert_encoder2.load_model_from_ckpt(weights_path)
+# pointbert_encoder2.to(device)
 
 # setup the projection head
 encoded_dim = 768 
 latent_dim = 512
-projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
+projection_head1 = EncoderHead(encoded_dim, latent_dim).to(device)
+projection_head2 = EncoderHead(encoded_dim, latent_dim).to(device)
 
 # define the dataloader
 n_datapoints = 2520 # 2*2*1800 # the desired numer of datapoints after augmentation
 n_raw_trajectories = 7 # the number of raw datapoints
-pred_horizon = 8 # 12 # 8 # 20
+pred_horizon = 12 # 12 # 8 # 20
 num_epochs = 750
 target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
 dataset_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery' # '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
@@ -94,7 +98,9 @@ noise_pred_net = ConditionalUnet1D(
 
 nets = nn.ModuleDict({
     'pointbert_encoder': pointbert_encoder,
-    'projection_head': projection_head,
+    'projection_head1': projection_head1,
+    # 'pointbert_encoder2': pointbert_encoder2,
+    'projection_head2': projection_head2,
     'noise_pred_net': noise_pred_net
 })
 
@@ -133,11 +139,11 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
 
                 # embed point cloud
                 pointcloud_features = nets['pointbert_encoder'](pointcloud)
-                pointcloud_features = nets['projection_head'](pointcloud_features)
+                pointcloud_features = nets['projection_head1'](pointcloud_features)
 
                 # embed goal cloud
                 goalcloud_features = nets['pointbert_encoder'](goalcloud)
-                goalcloud_features = nets['projection_head'](goalcloud_features)
+                goalcloud_features = nets['projection_head2'](goalcloud_features)
 
                 # stack pointcloud features for each obs horizon
                 pointcloud_features = pointcloud_features.unsqueeze(1).repeat(1, obs_horizon, 1)
@@ -189,10 +195,13 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
 
                 # state dict pointbert
                 torch.save(nets['pointbert_encoder'].state_dict(), join(ckpt_dir, 'pointbert_statedict'))
+                # torch.save(nets['pointbert_encoder2'].state_dict(), join(ckpt_dir, 'pointbert2_statedict'))
                 
                 # projection head
-                checkpoint = {'encoder_head': nets['projection_head']}
-                torch.save(checkpoint, join(ckpt_dir, 'encoder_best_checkpoint'))
+                checkpoint = {'encoder_head1': nets['projection_head1']}
+                torch.save(checkpoint, join(ckpt_dir, 'encoder1_best_checkpoint'))
+                checkpoint = {'encoder_head2': nets['projection_head2']}
+                torch.save(checkpoint, join(ckpt_dir, 'encoder2_best_checkpoint'))
 
                 # noise_pred_net
                 noise_checkpoint = {'noise_pred_net': nets['noise_pred_net']}

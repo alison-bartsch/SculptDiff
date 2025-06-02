@@ -86,7 +86,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     # define diffusion parameters
     obs_horizon = 1
     B = 1
-    pred_horizon = 8
+    pred_horizon = 12
+    subgoal_stepsize = 3
     execute_horizon = sub_goal_step
     action_dim = 8
     num_diffusion_iters = 100
@@ -203,17 +204,17 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     # while in_progress:
     # for sub_goal in sub_goal_list:
     for step in range(len(sub_goal_list)):
-        raw_goal = sub_goal_list[step]
+        raw_goals = sub_goal_list[step]
         # center the goal based on the goal center
-        numpy_goal = (raw_goal - ctr) * 10.0
+        numpy_goal = (raw_goals[0] - ctr) * 10.0
         # scale distance metric goal differently 
         dist_goal = numpy_goal.copy()
 
         if step == 0:
             # get the distance metrics between the point cloud and goal
-            dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goal),
-                            'EMD': emd(unnorm_pcl, raw_goal),
-                            'HAUSDORFF': hausdorff(unnorm_pcl, raw_goal)}
+            dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goals[0]),
+                            'EMD': emd(unnorm_pcl, raw_goals[0]),
+                            'HAUSDORFF': hausdorff(unnorm_pcl, raw_goals[0])}
 
             print("\nDists: ", dist_metrics)
             with open(save_path + '/dist_metrics_0.txt', 'w') as f:
@@ -228,17 +229,22 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             pcl_embed = projection_head(tokenized_states)
             pointcloud_features = pcl_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
 
+            obs_list = [nagent_pos, pointcloud_features]
+
             # pass the goal cloud through Point-BERT and projection head
-            goal = numpy_goal.copy()
-            goal = torch.from_numpy(goal).to(torch.float32)
-            goals = torch.unsqueeze(goal, 0).to(device)
-            tokenized_goals = pointbert(goals)
-            goal_embed = projection_head(tokenized_goals)
-            goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
+            for subgoal in sub_goal_list:
+                np_goal = (subgoal - ctr) * 10.0
+                goal = np_goal.copy()
+                goal = torch.from_numpy(goal).to(torch.float32)
+                goals = torch.unsqueeze(goal, 0).to(device)
+                tokenized_goals = pointbert(goals)
+                goal_embed = projection_head(tokenized_goals)
+                goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
+                obs_list.append(goalcloud_features)
 
             # concatenate vision feature and low-dim obs
             print("\nNagent pos: ", nagent_pos)
-            obs_features = torch.cat([pointcloud_features, nagent_pos, goalcloud_features],dim=-1)
+            obs_features = torch.cat(obs_list,dim=-1)
             obs_cond = obs_features.flatten(start_dim=1)
 
             # initialize action from Guassian noise
@@ -323,7 +329,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             o3d.io.write_point_cloud(save_path + '/cam5_pcl' + str(iter) + '.ply', pc5)
 
             # center the goal based on the point cloud center
-            numpy_goal = (raw_goal - ctr) * 10.0
+            numpy_goal = (raw_goals[0] - ctr) * 10.0
             # scale distance metric goal differently 
             dist_goal = numpy_goal.copy()
 
@@ -345,9 +351,9 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             cv2.imwrite(save_path + '/rgb5_state' + str(iter) + '.jpg', rgb5)
 
             # get the distance metrics between the point cloud and goal
-            dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goal),
-                            'EMD': emd(unnorm_pcl, raw_goal),
-                            'HAUSDORFF': hausdorff(unnorm_pcl, raw_goal)}
+            dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goals[0]),
+                            'EMD': emd(unnorm_pcl, raw_goals[0]),
+                            'HAUSDORFF': hausdorff(unnorm_pcl, raw_goals[0])}
 
             print("\nDists: ", dist_metrics)
             with open(save_path + '/dist_metrics_' + str(iter) + '.txt', 'w') as f:
@@ -404,9 +410,10 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_horizon5_7datasetfixed_with_augs' 
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_3_pcl_seq_12pred_7datasetfixed_with_augs' 
     centered_action = False
-    sub_goal_step = 5
+    sub_goal_step = 3
+    pred_horizon = 12
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -432,13 +439,25 @@ if __name__ == '__main__':
 
     # TODO: load in the list of autoregressively generated sub-goals
     sub_goal_load_path = '/home/alison/Documents/GitHub/SculptDiff/subgoals/step' + str(sub_goal_step) + '/'
-    sub_goal_name = 'autoregressive_subgoal'
+    # sub_goal_name = 'autoregressive_subgoal'
+    sub_goal_name = 'gt_subgoal'
     sub_goal_list = []
     i = 0
     while os.path.exists(sub_goal_load_path + sub_goal_name + str(i) + '.npy'):
         sub_goal = np.load(sub_goal_load_path + sub_goal_name + str(i) + '.npy')
         sub_goal_list.append(sub_goal)
         i += sub_goal_step
+
+    # TODO: sub_goal_list should be a list of lists
+    # each sub-list should contain pred_horizon / sub_goal_step number of sub-goals
+    if len(sub_goal_list) == 0:
+        raise ValueError("No sub-goals found in the specified path. Please check the sub-goal loading path and file naming convention.")
+    else:
+        nested_sub_goal_list = []
+        for i in range(0, len(sub_goal_list), pred_horizon // sub_goal_step):
+            nested_sub_goal_list.append(sub_goal_list[i:i + (pred_horizon // sub_goal_step)])
+    
+
     
     # initialize the robot and reset joints
     fa = FrankaArm()
@@ -473,7 +492,7 @@ if __name__ == '__main__':
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, sub_goal_step, sub_goal_list))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, sub_goal_step, nested_sub_goal_list))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, exp_save, done_queue))
 
     main_thread.start()

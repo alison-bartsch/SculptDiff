@@ -14,7 +14,7 @@ import torch
 
 
 # exp name
-exp_name = 'subgoal_3_pcl_seq_12pred_7datasetfixed_with_augs' 
+exp_name = 'test' # 'subgoal_3_pcl_seq_12pred_7datasetfixed_with_augs' 
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -84,6 +84,7 @@ noise_scheduler = DDPMScheduler(
 pcl_feature_dim = 512
 lowdim_obs_dim = 8 
 obs_dim = int((pred_horizon + subgoal_stepsize) / subgoal_stepsize)*pcl_feature_dim + lowdim_obs_dim
+print("obs_dim: ", obs_dim)
 action_dim = 8
 obs_horizon = 1
 
@@ -131,11 +132,14 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
 
                 obs_features = [nagent_pos]
                 for i in range(nbatch['pcl_seq'].shape[1]):
+                    print("i: ", i)
                     pcl = nbatch['pcl_seq'][:, i, :, :].to(device).float()
                     pcl_features = nets['pointbert_encoder'](pcl)
                     pcl_features = nets['projection_head'](pcl_features)
                     pcl_features = pcl_features.unsqueeze(1).repeat(1, obs_horizon, 1)
                     obs_features.append(pcl_features)
+                print("length of obs_features: ", len(obs_features))
+                assert False
                 obs_features = torch.cat(obs_features, dim=-1)
 
                 # concatenate vision feature and low-dim obs
