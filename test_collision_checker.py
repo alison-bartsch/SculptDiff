@@ -65,7 +65,7 @@ def check_collision(pcl, cylinder):
     
 if __name__ == "__main__":
     # Example action7d input
-    action7d = np.array([0.6, 0.0, 0.1, 0.0, 0.0, 0.0, 0.001])  # Example action7d input
+    action7d = np.array([0.6, 0.0, 0.1, 40.0, 20.0, 45.0, 0.001])  # Example action7d input
     np_pcl = np.load('/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory4/unnormalized_pointcloud22.npy') # 22.npy')  # Load a sample point cloud
     pcl = o3d.geometry.PointCloud()
     pcl.points = o3d.utility.Vector3dVector(np_pcl)
