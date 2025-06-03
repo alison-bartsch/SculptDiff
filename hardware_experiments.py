@@ -10,6 +10,7 @@ import pyrealsense2 as rs
 import robomail.vision as vis
 from frankapy import FrankaArm
 from pcl_utils import *
+from test_collision_checker import check_finger_collision
 from pointBERT.tools import builder
 from pointBERT.utils.config import cfg_from_yaml_file
 from scipy.spatial.transform import Rotation
@@ -60,15 +61,64 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     time.sleep(3)
     return intermediate_pose
 
+def sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device):
+    with torch.inference_mode():
+        start = time.time()
+        # pass the point cloud through Point-BERT to get the latent representation
+        state = torch.from_numpy(pointcloud).to(torch.float32)
+        states = torch.unsqueeze(state, 0).to(device)
+        tokenized_states = pointbert(states)
+        pcl_embed = projection_head(tokenized_states)
+        pointcloud_features = pcl_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
 
-def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon):
+        # pass the goal cloud through Point-BERT and projection head
+        goal = numpy_goal.copy()
+        goal = torch.from_numpy(goal).to(torch.float32)
+        goals = torch.unsqueeze(goal, 0).to(device)
+        tokenized_goals = pointbert(goals)
+        goal_embed = projection_head(tokenized_goals)
+        goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
+
+        # concatenate vision feature and low-dim obs
+        print("\nNagent pos: ", nagent_pos)
+        obs_features = torch.cat([pointcloud_features, nagent_pos, goalcloud_features],dim=-1)
+        obs_cond = obs_features.flatten(start_dim=1)
+
+        # initialize action from Guassian noise
+        noisy_action = torch.randn(
+            (B, pred_horizon, action_dim), device=device)
+        naction = noisy_action
+
+        # init scheduler
+        noise_scheduler.set_timesteps(num_diffusion_iters)
+
+        for k in noise_scheduler.timesteps:
+            # predict noise
+            noise_pred = noise_pred_net(
+                sample=naction,
+                timestep=k,
+                global_cond=obs_cond
+            )
+
+            # inverse diffusion step (remove noise)
+            naction = noise_scheduler.step(
+                model_output=noise_pred,
+                timestep=k,
+                sample=naction
+            ).prev_sample
+
+        # unnormalize action
+        naction = naction.detach().to('cpu').numpy()
+        end = time.time()
+    return naction, end - start
+
+
+def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check):
     '''
     '''
     # define diffusion parameters
     obs_horizon = 1
     B = 1
-    # pred_horizon = 12
-    # execute_horizon = 8
     action_dim = 8
     num_diffusion_iters = 100
     noise_scheduler = DDPMScheduler(
@@ -116,11 +166,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     noise_pred_net = noise_checkpoint['noise_pred_net'].to(device)
 
     # load in the goal
-    # raw_goal = np.load('goals/' + goal_str + '.npy')
-    # raw_goal = np.load('/home/alison/Clay_Data/Feb26_Human_Demos_Raw/pottery/Trajectory1/unnormalized_pointcloud26.npy')
-    # /home/alison/Clay_Data/Feb26_Human_Demos_Raw/pottery/Trajectory5
-    # raw_goal = np.load('/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory0/unnormalized_pointcloud64.npy')
-    raw_goal = np.load('/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory2/unnormalized_pointcloud33.npy')
+    raw_goal = np.load(goal_path)
 
     # define observation pose
     pose = fa.get_pose()
@@ -162,7 +208,6 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     goal_pcl = o3d.geometry.PointCloud()
     goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
     goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
-    # o3d.visualization.draw_geometries([pcl, goal_pcl])
 
     # save observation
     np.save(save_path + '/pcl0.npy', pointcloud)
@@ -184,55 +229,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     iter = 1
     in_progress = True
     while in_progress:
-        with torch.inference_mode():
-            start = time.time()
-            # pass the point cloud through Point-BERT to get the latent representation
-            state = torch.from_numpy(pointcloud).to(torch.float32)
-            states = torch.unsqueeze(state, 0).to(device)
-            tokenized_states = pointbert(states)
-            pcl_embed = projection_head(tokenized_states)
-            pointcloud_features = pcl_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
-
-            # pass the goal cloud through Point-BERT and projection head
-            goal = numpy_goal.copy()
-            goal = torch.from_numpy(goal).to(torch.float32)
-            goals = torch.unsqueeze(goal, 0).to(device)
-            tokenized_goals = pointbert(goals)
-            goal_embed = projection_head(tokenized_goals)
-            goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
-
-            # concatenate vision feature and low-dim obs
-            print("\nNagent pos: ", nagent_pos)
-            obs_features = torch.cat([pointcloud_features, nagent_pos, goalcloud_features],dim=-1)
-            obs_cond = obs_features.flatten(start_dim=1)
-
-            # initialize action from Guassian noise
-            noisy_action = torch.randn(
-                (B, pred_horizon, action_dim), device=device)
-            naction = noisy_action
-
-            # init scheduler
-            noise_scheduler.set_timesteps(num_diffusion_iters)
-
-            for k in noise_scheduler.timesteps:
-                # predict noise
-                noise_pred = noise_pred_net(
-                    sample=naction,
-                    timestep=k,
-                    global_cond=obs_cond
-                )
-
-                # inverse diffusion step (remove noise)
-                naction = noise_scheduler.step(
-                    model_output=noise_pred,
-                    timestep=k,
-                    sample=naction
-                ).prev_sample
-
-        # unnormalize action
-        naction = naction.detach().to('cpu').numpy()
-        end = time.time()
-        planning_time_list.append(end-start)
+        naction, total_time = sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device)
+        planning_time_list.append(total_time)
 
         # execute N actions before replanning
         pred_action = naction[0]
@@ -248,6 +246,22 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             print("\nSingle-step action: ", unnorm_a)
             terminate = termination_pred[j]
 
+            # check for collision with the point cloud if the initial piercing actions have been executed
+            if iter > 6 and collision_check:
+                collision = check_finger_collision(unnorm_a, pointcloud, vis=False)
+                n_checks = 0
+                while collision and n_checks < 10:
+                    n_checks += 1
+                    print("\nCollision detected, replanning...")
+                    naction, total_time = sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device)
+                    pred_action = naction[0]
+                    termination_pred = pred_action[:,7]
+                    action_pred = (pred_action[:,0:7] + 1.0) / 2.0
+                    action_pred = action_pred * (a_maxs7d - a_mins7d) + a_mins7d
+                    unnorm_a = action_pred[j,:]
+                    terminate = termination_pred[j]
+                    collision = check_finger_collision(unnorm_a, pointcloud, vis=False)
+
             if centered_action:
                 unnorm_a[0:3] = unnorm_a[0:3] + ctr
 
@@ -256,14 +270,12 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             
             # assert False
             intermediate_pose = goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], unnorm_a[3], unnorm_a[4], unnorm_a[5], unnorm_a[6])
-            # goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], 0, 0, unnorm_a[5], unnorm_a[6])
             n_action+=1
 
             # wait here
             time.sleep(3)
 
             # open the gripper
-            # fa.open_gripper(block=True)
             fa.goto_gripper(0.04, block=True)
 
             # move to intermediate_pose
@@ -370,12 +382,12 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    # model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_20pred_10dataset_with_augs' # NOTE: doesn't do very well
-    # model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_12pred_with_augs' # works much better
     model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_16pred_7datasetfixed_with_augs'
+    goal_path = '/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
-    pred_horizon = 16 # 20 # 12
-    execute_horizon = 16 # 8
+    pred_horizon = 16 
+    execute_horizon = 16 
+    collision_check = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -397,9 +409,11 @@ if __name__ == '__main__':
     # make the experiment dictionary with important information for the experiment run
     exp_dict = {'goal: ', goal_shape,
                 'model: ', model_path,
+                'goal: ', goal_path,
                 'centered_action: ', centered_action,
                 'pred_horizon: ', pred_horizon,
-                'execute_horizon: ', execute_horizon}
+                'execute_horizon: ', execute_horizon,
+                'collision_check: ', collision_check}
     
     with open(exp_save + '/experiment_params.txt', 'w') as f:
         f.write(str(exp_dict))
@@ -428,16 +442,10 @@ if __name__ == '__main__':
     # initialize the 3D vision code
     pcl_vis = vis.Vision3D()    
 
-    # # load in the goal and save to the experiment folder
-    # goal = np.load('goals/' + goal_shape + '.npy')
-    # # center goal
-    # goal = (goal - np.mean(goal, axis=0)) * 10.0
-    # np.save(exp_save + '/goal.npy', goal)
-
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, video_save_path, done_queue))
 
     main_thread.start()
