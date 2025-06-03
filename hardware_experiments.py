@@ -62,6 +62,7 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     return intermediate_pose
 
 def sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device):
+    B = 1
     with torch.inference_mode():
         start = time.time()
         # pass the point cloud through Point-BERT to get the latent representation
@@ -387,7 +388,7 @@ if __name__ == '__main__':
     centered_action = False
     pred_horizon = 16 
     execute_horizon = 16 
-    collision_check = True
+    collision_check = False
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
