@@ -194,3 +194,12 @@ if __name__ == "__main__":
     make_gif(img_list, filename='pottery_traj' + str(traj_idx) + '.gif', duration=250)
     # vis_fov_point_cloud(pcl)
 
+
+    # # visualize final point cloud for all trajectories
+    # traj_len = [64, 22, 33, 32, 22, 20, 33]  # Number of frames in each trajectory
+    # for traj_idx in range(7):
+    #     np_pcl = np.load('/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory' + str(traj_idx) + '/unnormalized_pointcloud' + str(traj_len[traj_idx]-1) + '.npy')  # Load a sample point cloud
+    #     pcl = o3d.geometry.PointCloud()
+    #     pcl.points = o3d.utility.Vector3dVector(np_pcl)
+    #     o3d.visualization.draw_geometries([pcl])
+
