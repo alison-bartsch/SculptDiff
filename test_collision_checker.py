@@ -81,6 +81,10 @@ def check_finger_collision(action7d, pcl, vis=False):
 
         o3d.visualization.draw_geometries([cylinder1, cylinder2, pcl])
 
+    # check size of the point cloud, if more than 250 points, downsample it to 250 points
+    if len(pcl.points) > 250:
+        pcl.points = o3d.utility.Vector3dVector(np.asarray(pcl.points)[np.random.choice(len(pcl.points), 250, replace=False)])
+
     # check if the fingers collide with the point cloud
     c1_collision_count = check_collision(pcl, cylinder1)
     c2_collision_count = check_collision(pcl, cylinder2)
