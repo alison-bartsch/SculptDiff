@@ -414,8 +414,8 @@ if __name__ == '__main__':
     goal_shape = 'pottery' 
     model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_3_pcl_seq_12pred_7datasetfixed_with_augs' 
     centered_action = False
-    sub_goal_step = 3
-    pred_horizon = 12
+    sub_goal_step = 4
+    pred_horizon = 16
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -445,8 +445,8 @@ if __name__ == '__main__':
 
     # TODO: load in the list of autoregressively generated sub-goals
     sub_goal_load_path = '/home/alison/Documents/GitHub/SculptDiff/subgoals/step' + str(sub_goal_step) + '/'
-    sub_goal_name = 'autoregressive_subgoal'
-    # sub_goal_name = 'gt_subgoal'
+    # sub_goal_name = 'autoregressive_subgoal'
+    sub_goal_name = 'gt_subgoal'
     sub_goal_list = []
     i = 0
     while os.path.exists(sub_goal_load_path + sub_goal_name + str(i) + '.npy'):

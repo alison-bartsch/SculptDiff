@@ -12,9 +12,25 @@ import os
 import numpy as np
 import torch
 
+def collate_fn(batch):
+    """
+    Custom collate function to handle variable-length sequences in the dataset.
+    """
+    # Stack the agent positions and actions
+    agent_pos = torch.stack([item['agent_pos'] for item in batch], dim=0)
+    action = torch.stack([item['action'] for item in batch], dim=0)
+    
+    # Stack the point cloud sequences
+    pcl_seq = torch.stack([item['pcl_seq'] for item in batch], dim=0)
+    
+    return {
+        'agent_pos': agent_pos,
+        'action': action,
+        'pcl_seq': pcl_seq
+    }
 
 # exp name
-exp_name = 'test' # 'subgoal_3_pcl_seq_12pred_7datasetfixed_with_augs' 
+exp_name = 'subgoal_16pred_4step_7datasetfixed_with_augs' # 'subgoal_3_pcl_seq_12pred_7datasetfixed_with_augs' 
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -37,8 +53,8 @@ projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
 # define the dataloader
 n_datapoints = 2520 # 2*2*1800 # the desired numer of datapoints after augmentation
 n_raw_trajectories = 7 # the number of raw datapoints
-pred_horizon = 12 # 8 # 20
-subgoal_stepsize = 3
+pred_horizon = 16 # 8 # 20
+subgoal_stepsize = 4
 num_epochs = 750
 target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
 dataset_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery' # '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
@@ -54,7 +70,8 @@ dataloader = torch.utils.data.DataLoader(
     # accelerate cpu-gpu transfer
     pin_memory=True,
     # don't kill worker process after each epoch
-    persistent_workers=True)
+    persistent_workers=True,
+    collate_fn=collate_fn)
 
 # save experiment parameters as a dictionary
 exp_params = {'exp_name': exp_name,
@@ -84,7 +101,6 @@ noise_scheduler = DDPMScheduler(
 pcl_feature_dim = 512
 lowdim_obs_dim = 8 
 obs_dim = int((pred_horizon + subgoal_stepsize) / subgoal_stepsize)*pcl_feature_dim + lowdim_obs_dim
-print("obs_dim: ", obs_dim)
 action_dim = 8
 obs_horizon = 1
 
@@ -132,14 +148,11 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
 
                 obs_features = [nagent_pos]
                 for i in range(nbatch['pcl_seq'].shape[1]):
-                    print("i: ", i)
                     pcl = nbatch['pcl_seq'][:, i, :, :].to(device).float()
                     pcl_features = nets['pointbert_encoder'](pcl)
                     pcl_features = nets['projection_head'](pcl_features)
                     pcl_features = pcl_features.unsqueeze(1).repeat(1, obs_horizon, 1)
                     obs_features.append(pcl_features)
-                print("length of obs_features: ", len(obs_features))
-                assert False
                 obs_features = torch.cat(obs_features, dim=-1)
 
                 # concatenate vision feature and low-dim obs

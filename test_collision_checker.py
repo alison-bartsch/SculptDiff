@@ -20,7 +20,8 @@ def check_finger_collision(action7d, pcl, vis=False):
     cylinder2.paint_uniform_color([0.8, 0.8, 0.8])  # Set color to light gray
     cylinder2.translate([-cylinder_length / 2, 0, 0])  # Center the cylinder at the origin
     cylinder2.rotate(o3d.geometry.get_rotation_matrix_from_xyz((0, 0, np.pi / 2)))  # Rotate to align with the y-axis
-    cylinder2.translate([0.04, 0, 0])  # Move the second cylinder to the right
+    # cylinder2.translate([0.04, 0, 0])  # Move the second cylinder to the right
+    cylinder2.translate([0.05, 0, 0])  # Move the second cylinder to the right
 
     # Apply the action7d transformations
     translation = action7d[:3]  # x, y, z translation
@@ -47,6 +48,8 @@ def check_finger_collision(action7d, pcl, vis=False):
         # line_pcl_y.points = o3d.utility.Vector3dVector(line_points_y)
         # line_pcl_y.paint_uniform_color([0, 1, 0])  # Set color to green
         # o3d.visualization.draw_geometries([cylinder1, cylinder2, pcl, line_pcl, line_pcl_y])
+
+
         o3d.visualization.draw_geometries([cylinder1, cylinder2, pcl])
 
     # check if the fingers collide with the point cloud
@@ -56,12 +59,12 @@ def check_finger_collision(action7d, pcl, vis=False):
     collision_count = c1_collision_count + c2_collision_count
 
     # return True if either finger collides with the point cloud
-    if collision_count > 10:  # threshold for collision detection
+    if collision_count > 50:  # threshold for collision detection
         return True
     else:
         return False
 
-def check_collision(pcl, cylinder):
+def check_bbox_collision(pcl, cylinder):
     '''
     Check for collision between the cylinder and the point cloud.
     A collision is defined if any point in the point cloud lies within
@@ -73,6 +76,54 @@ def check_collision(pcl, cylinder):
     points = np.asarray(pcl.points)
     # collision = np.any(np.all((points >= bounding_box.min_bound) & (points <= bounding_box.max_bound), axis=1))
     collision_count = np.sum(np.all((points >= bounding_box.min_bound) & (points <= bounding_box.max_bound), axis=1))
+    return collision_count
+
+def check_collision(pcl, cylinder, epsilon=0.001):
+    '''
+    Check for collision between the cylinder and the point cloud.
+    A collision is defined if any point in the point cloud lies within
+    the gripper mesh. Returns True if there is a collision, False otherwise.
+    '''
+    # point-mesh epsilon intersection test
+    # for all points perform a point-triangle distance check against all triangles in the cylinder mesh
+    points = np.asarray(pcl.points)
+    triangles = np.asarray(cylinder.triangles)
+    vertices = np.asarray(cylinder.vertices)
+    collision_count = 0
+    # for point in points:
+    #     for triangle in triangles:
+    #         v0 = vertices[triangle[0]]
+    #         v1 = vertices[triangle[1]]
+    #         v2 = vertices[triangle[2]]
+    #         # Calculate the area of the triangle
+    #         area = np.linalg.norm(np.cross(v1 - v0, v2 - v0)) / 2.0
+    #         # Calculate the distance from the point to the triangle
+    #         d = np.abs(np.dot(np.cross(v1 - v0, v2 - v0), point - v0)) / (area + epsilon)
+    #         if d < epsilon:
+    #             collision_count += 1
+
+    # point-mesh containment test
+    # for all points choose a random ray extending to infinity and calculate the number of intersections of that ray with the mesh
+    # if the number of intersections is odd, the point is inside the mesh
+    # if the number of intersections is even, the point is outside the mesh
+    for point in points:
+        random_direction = np.random.rand(3)  # Random direction vector
+        p1 = point
+        p2 = point + random_direction*1e6
+        dir = p2 - p1
+        length = np.linalg.norm(dir)
+        dir /= length  # Normalize the direction vector
+
+        cylinder.compute_triangle_normals()  # Ensure normals are computed for the mesh
+
+        scene = o3d.geometry.RaycastingScene()
+        mesh_id = scene.add_triangles(cylinder)  # Add the cylinder mesh to the scene
+        query = scene.cast_rays(o3d.core.Tensor([{'origin': p1, 'direction': dir}]))  # Cast a ray from the point in the direction
+        intersections = scene.compute_scene_intersection(p1, dir, max_distance=length)  # Compute intersections with the mesh
+        ray_mesh_intersections = intersections.shape[0] if intersections is not None else 0
+
+        if len(ray_mesh_intersections) % 2 == 1:  # odd number of intersections means point is inside the mesh
+            collision_count += 1
     return collision_count
     
 if __name__ == "__main__":
@@ -96,9 +147,9 @@ if __name__ == "__main__":
 
         action7d = np.load('/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory0/action7d_unnormalized' + str(i-1) + '.npy')  # Load the corresponding action
         # add 0.03 offset to the x coordinate of the action
-        action7d[0] += 0.025 # 0.025
+        action7d[0] += 0.0225 # 0.025
         # add 0.01 offset to the y coordinate of the action
-        action7d[1] -= 0.02 
+        action7d[1] -= 0.0225 
         # change the z coordinate of the action to be - 0.045
         action7d[2] -= 0.04
         # change the rotation about the z-axis to add 90 degrees
