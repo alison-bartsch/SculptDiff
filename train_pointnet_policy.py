@@ -11,12 +11,12 @@ import os
 import numpy as np
 import torch
 
-import wandb
+# import wandb
 
 
 
 # exp name
-exp_name = 'pottery_16pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
+exp_name = 'pointnet_16pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -24,9 +24,9 @@ if not os.path.exists(ckpt_dir):
 
 
 # load in pointnet encoder from pretrained weights
-device = torch.device('cuda:1')
+device = torch.device('cuda')
 pointnet_encoder = PointNetEncoderXYZ().to(device)
-checkpoint_path = "/home/alison/Documents/Github/SculptDiff/pointnet/weights/best_model_epoch_181.pth"
+checkpoint_path = "/home/alison/Documents/GitHub/SculptDiff/pointnet/weights/best_model_epoch_181.pth"
 state_dict = torch.load(checkpoint_path, map_location=device)
 
 # Load only the encoder weights
@@ -68,11 +68,11 @@ exp_params = {'exp_name': exp_name,
               'n_epochs': num_epochs,
               'dataset': dataset_path}
 
-wandb.init(
-    project="sculptdiff",  # change to your wandb project name
-    name=exp_name,
-    config=exp_params
-)
+# wandb.init(
+#     project="sculptdiff",  # change to your wandb project name
+#     name=exp_name,
+#     config=exp_params
+# )
 
 with open(ckpt_dir + '/experiment_params.txt', 'w') as f:
         f.write(str(exp_params))
@@ -111,7 +111,7 @@ nets = nn.ModuleDict({
 
 # Exponential Moving Average
 ema = EMAModel(
-    model=nets, # due to older version of diffusers
+    parameters=nets.parameters(),
     power=0.75)
 
 # Standard ADAM optimizer
@@ -194,14 +194,17 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
             
             # save the model weights every 50 epochs
             mean_loss = np.mean(epoch_loss)
-            wandb.log({"epoch": epoch_idx, "loss": mean_loss})
+            # wandb.log({"epoch": epoch_idx, "loss": mean_loss})
 
             if mean_loss < best_loss and epoch_idx % 50 == 0:
                 best_loss = mean_loss
                 print("\nSaving model weights with avg loss = ", mean_loss)
 
                 # state dict pointbert
-                torch.save(nets['pointnet_encoder'].state_dict(), join(ckpt_dir, 'pointnet_encoder_best_checkpoint'))
+                # torch.save(nets['pointnet_encoder'].state_dict(), join(ckpt_dir, 'pointnet_encoder_best_checkpoint'))
+
+                pointnet_checkpoint = {'encoder': nets['pointnet_encoder']}
+                torch.save(pointnet_checkpoint, join(ckpt_dir, 'pointnet_best_checkpoint.zip'))
                 
                 # projection head
                 checkpoint = {'encoder_head': nets['projection_head']}
@@ -210,7 +213,7 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
                 # noise_pred_net
                 noise_checkpoint = {'noise_pred_net': nets['noise_pred_net']}
                 torch.save(noise_checkpoint, join(ckpt_dir, 'noise_pred_best_checkpoint'))
-                assert False
+                # assert False
 
             # if epoch_idx % 100 == 0:
             #     print("\n\n\n\n\n----------------- PREDICTIONS -------------------")
