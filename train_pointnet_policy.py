@@ -26,7 +26,7 @@ if not os.path.exists(ckpt_dir):
 # load in pointnet encoder from pretrained weights
 device = torch.device('cuda:1')
 pointnet_encoder = PointNetEncoderXYZ().to(device)
-checkpoint_path = "/home/acar/SculptDiff/pointnet/weights/best_model_epoch_181.pth"
+checkpoint_path = "/home/alison/Documents/Github/SculptDiff/pointnet/weights/best_model_epoch_181.pth"
 state_dict = torch.load(checkpoint_path, map_location=device)
 
 # Load only the encoder weights
