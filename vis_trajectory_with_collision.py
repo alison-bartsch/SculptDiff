@@ -45,7 +45,8 @@ def animate_point_cloud(traj_idx, traj_len, view='isometric', pltmap='viridis'):
     action7d[1] -= 0.025
     action7d[2] -= 0.04
     action7d[5] += 90
-    cylinder1, cylinder2 = create_grippers(action7d)
+    # print("Action 7D ee dist:", action7d[6])
+    cylinder1, cylinder2 = create_grippers(action7d) #, ee_dist=action7d[6])
     vis.add_geometry(pcl)
     vis.add_geometry(cylinder1)
     vis.add_geometry(cylinder2)
@@ -73,7 +74,8 @@ def animate_point_cloud(traj_idx, traj_len, view='isometric', pltmap='viridis'):
         action7d[1] -= 0.025
         action7d[2] -= 0.04
         action7d[5] += 90
-        c1, c2 = create_grippers(action7d)
+        # print("Action 7D ee dist:", action7d[6])
+        c1, c2 = create_grippers(action7d) #, ee_dist=action7d[6])
 
         # update the gripper geometries
         cylinder1.vertices = c1.vertices

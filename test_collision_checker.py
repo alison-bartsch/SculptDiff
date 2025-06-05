@@ -2,7 +2,7 @@ import numpy as np
 import open3d as o3d
 from tqdm import tqdm
 
-def create_grippers(action7d):
+def create_grippers(action7d, ee_dist=0.05):
     # Create two cylinders for the gripper fingers
     cylinder_radius = 0.006 #4 # 4  # 8mm diameter
     cylinder_length = 0.045  # 45mm length
@@ -17,7 +17,7 @@ def create_grippers(action7d):
     cylinder2.translate([-cylinder_length / 2, 0, 0])  # Center the cylinder at the origin
     cylinder2.rotate(o3d.geometry.get_rotation_matrix_from_xyz((0, 0, np.pi / 2)))  # Rotate to align with the y-axis
     # cylinder2.translate([0.04, 0, 0])  # Move the second cylinder to the right
-    cylinder2.translate([0.05, 0, 0])  # Move the second cylinder to the right
+    cylinder2.translate([ee_dist, 0, 0])  # Move the second cylinder to the right
 
     # Apply the action7d transformations
     translation = action7d[:3]  # x, y, z translation
