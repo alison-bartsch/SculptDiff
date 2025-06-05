@@ -249,7 +249,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
             # check for collision with the point cloud if the initial piercing actions have been executed
             if iter > 6 and collision_check:
-                collision = check_finger_collision(unnorm_a, pointcloud, vis=False)
+                collision = check_finger_collision(unnorm_a, pcl, vis=False)
                 n_checks = 0
                 while collision and n_checks < 10:
                     n_checks += 1
@@ -261,7 +261,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
                     action_pred = action_pred * (a_maxs7d - a_mins7d) + a_mins7d
                     unnorm_a = action_pred[j,:]
                     terminate = termination_pred[j]
-                    collision = check_finger_collision(unnorm_a, pointcloud, vis=False)
+                    collision = check_finger_collision(unnorm_a, pcl, vis=False)
 
             if centered_action:
                 unnorm_a[0:3] = unnorm_a[0:3] + ctr
@@ -388,7 +388,7 @@ if __name__ == '__main__':
     centered_action = False
     pred_horizon = 16 
     execute_horizon = 16 
-    collision_check = False
+    collision_check = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------

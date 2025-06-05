@@ -76,6 +76,7 @@ def subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_schedu
 
         # pass the goal cloud through Point-BERT and projection head
         for subgoal in raw_goals:
+            print("iterating through raw goals")
             np_goal = (subgoal - ctr) * 10.0
             goal = np_goal.copy()
             goal = torch.from_numpy(goal).to(torch.float32)
@@ -233,10 +234,10 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     # # scale distance metric goal differently 
     # dist_goal = numpy_goal.copy()
 
-    # # visualize observation vs goal cloud
-    # pcl = o3d.geometry.PointCloud()
-    # pcl.points = o3d.utility.Vector3dVector(pointcloud)
-    # pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
+    # visualize observation vs goal cloud
+    pcl = o3d.geometry.PointCloud()
+    pcl.points = o3d.utility.Vector3dVector(pointcloud)
+    pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
     # goal_pcl = o3d.geometry.PointCloud()
     # goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
     # goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
@@ -300,7 +301,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
             # check for collision with the point cloud if the initial piercing actions have been executed
             if iter > 6 and collision_check:
-                collision = check_finger_collision(unnorm_a, pointcloud, vis=False)
+                collision = check_finger_collision(unnorm_a, pcl, vis=False)
                 n_checks = 0
                 while collision and n_checks < 10:
                     n_checks += 1
@@ -312,7 +313,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
                     action_pred = action_pred * (a_maxs7d - a_mins7d) + a_mins7d
                     unnorm_a = action_pred[j,:]
                     terminate = termination_pred[j]
-                    collision = check_finger_collision(unnorm_a, pointcloud, vis=False)
+                    collision = check_finger_collision(unnorm_a, pcl, vis=False)
  
             if centered_action:
                 unnorm_a[0:3] = unnorm_a[0:3] + ctr
@@ -433,13 +434,13 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # ---------------- Experimental Parameters to Define ----------------
     # -------------------------------------------------------------------
-    exp_num = 1
+    exp_num = 10
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_3_pcl_seq_12pred_7datasetfixed_with_augs' 
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_16pred_4step_7datasetfixed_with_augs' 
     centered_action = False
     sub_goal_step = 4
     pred_horizon = 16
-    collision_check = False
+    collision_check = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -487,7 +488,13 @@ if __name__ == '__main__':
     else:
         nested_sub_goal_list = []
         for i in range(0, len(sub_goal_list), pred_horizon // sub_goal_step):
-            nested_sub_goal_list.append(sub_goal_list[i:i + (pred_horizon // sub_goal_step)])
+            if len(sub_goal_list[i:i + (pred_horizon // sub_goal_step)]) < sub_goal_step:
+                sub_list = []
+                for j in range(sub_goal_step):
+                    sub_list.append(sub_goal_list[i:i + (pred_horizon // sub_goal_step)])
+            else:
+                nested_sub_goal_list.append(sub_goal_list[i:i + (pred_horizon // sub_goal_step)])
+            print("Length: ", len(sub_goal_list[i:i + (pred_horizon // sub_goal_step)]))
     
 
     

@@ -1,0 +1,1 @@
+{False, 'collision_check: ', True, 'model: ', 4, 'centered_action: ', 'pred_horizon: ', 'goal: ', '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_16pred_4step_7datasetfixed_with_augs', 16, 'sub_goal_step: ', 'pottery'}

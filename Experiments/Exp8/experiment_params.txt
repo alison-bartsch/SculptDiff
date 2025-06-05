@@ -1,0 +1,1 @@
+{False, True, 'centered_action: ', '/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory2/unnormalized_pointcloud33.npy', 16, 'pred_horizon: ', 'pottery', 'execute_horizon: ', 'collision_check: ', 'goal: ', '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_16pred_7datasetfixed_with_augs', 'model: '}
