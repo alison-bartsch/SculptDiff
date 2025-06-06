@@ -3,8 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class EncoderHead(nn.Module):
-    def __init__(self, encoded_dim, latent_dim):
+    def __init__(self, encoded_dim, latent_dim, is_pointBERT=True):
         super(EncoderHead, self).__init__()
+        self.is_pointBERT = is_pointBERT
         self.encoded_dim = encoded_dim
         self.latent_dim = latent_dim
         
@@ -18,6 +19,9 @@ class EncoderHead(nn.Module):
 
     def forward(self, encoded_pcl):
         # concatentation strategy from pointtransformer for downstream classification tasks
-        x = torch.cat([encoded_pcl[:,0], encoded_pcl[:, 1:].max(1)[0]], dim = -1) 
+        if self.is_pointBERT:
+            x = torch.cat([encoded_pcl[:,0], encoded_pcl[:, 1:].max(1)[0]], dim = -1)
+        else:
+            x = encoded_pcl
         latent_state = self.encoder_head(x)
         return latent_state
