@@ -2,19 +2,30 @@ import os
 import numpy as np
 import open3d as o3d
 
-traj_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory1'
-for i in range(19,23):
+# traj_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory1'/
+traj_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory3'
+for i in range(31,32):
     action = np.load(traj_path + '/action7d_unnormalized' + str(i) + '.npy')
-    np.save(traj_path + '/action7d_unnormalized' + str(i-1) + '.npy', action)
+    # np.save(traj_path + '/action7d_unnormalized' + str(i-1) + '.npy', action)
 
     action5d = np.load(traj_path + '/action5d_unnormalized' + str(i) + '.npy')
-    np.save(traj_path + '/action5d_unnormalized' + str(i-1) + '.npy', action5d)
+    # np.save(traj_path + '/action5d_unnormalized' + str(i-1) + '.npy', action5d)
 
     ctr = np.load(traj_path + '/pcl_center' + str(i) + '.npy')
-    np.save(traj_path + '/pcl_center' + str(i-1) + '.npy', ctr)
+    # np.save(traj_path + '/pcl_center' + str(i-1) + '.npy', ctr)
 
     pcl = np.load(traj_path + '/unnormalized_pointcloud' + str(i) + '.npy')
-    np.save(traj_path + '/unnormalized_pointcloud' + str(i-1) + '.npy', pcl)
+    # np.save(traj_path + '/unnormalized_pointcloud' + str(i-1) + '.npy', pcl)
+
+    o3d_pcl = o3d.geometry.PointCloud()
+    o3d_pcl.points = o3d.utility.Vector3dVector(pcl)
+    if i == 0:
+        # set to blue
+        o3d_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0, 0, 1]), (len(pcl), 1)))
+    else:
+        # set to red
+        o3d_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1, 0, 0]), (len(pcl), 1)))
+    o3d.visualization.draw_geometries([o3d_pcl])
 
 # for i in range(1):
 #     j = 1
