@@ -154,10 +154,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     # pointnet_encoder.eval()
 
     # initialize the pointnet model
-    pointnet_encoder = PointNetEncoderXYZ().to(device)
-    state_dict = torch.load(ckpt_dir + '/pointnet_best_checkpoint.zip', map_location=torch.device('cpu'))
-    pointnet_encoder.load_state_dict({k.replace('encoder.', ''): v for k, v in state_dict.items() if k.startswith('encoder.')})
-    pointnet_encoder.eval()
+    pointnet_encoder_state_dict = torch.load(ckpt_dir + '/pointnet_best_checkpoint.zip', map_location=torch.device('cpu'))
+    pointnet_encoder = pointnet_encoder_state_dict['encoder']
 
     # load projection head from ckpt_dir
     enc_checkpoint = torch.load(ckpt_dir + '/encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
