@@ -67,7 +67,7 @@ def sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_schedul
         # pass the point cloud through Point-BERT to get the latent representation
         state = torch.from_numpy(pointcloud).to(torch.float32)
         states = torch.unsqueeze(state, 0).to(device)
-        tokenized_states = pointnet_encoder(states)
+        tokenized_states, _  = pointnet_encoder(states)
         pcl_embed = projection_head(tokenized_states)
         pointcloud_features = pcl_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
 
@@ -75,7 +75,7 @@ def sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_schedul
         goal = numpy_goal.copy()
         goal = torch.from_numpy(goal).to(torch.float32)
         goals = torch.unsqueeze(goal, 0).to(device)
-        tokenized_goals = pointnet_encoder(goals)
+        tokenized_goals, _  = pointnet_encoder(goals)
         goal_embed = projection_head(tokenized_goals)
         goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
 
@@ -155,7 +155,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
     # initialize the pointnet model
     pointnet_encoder_state_dict = torch.load(ckpt_dir + '/pointnet_best_checkpoint.zip', map_location=torch.device('cpu'))
-    pointnet_encoder = pointnet_encoder_state_dict['encoder']
+    pointnet_encoder = pointnet_encoder_state_dict['encoder'].to(device)
 
     # load projection head from ckpt_dir
     enc_checkpoint = torch.load(ckpt_dir + '/encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
