@@ -30,7 +30,7 @@ def collate_fn(batch):
     }
 
 # exp name
-exp_name = 'subgoal_16pred_4step_7datasetfixed_with_augs' # 'subgoal_3_pcl_seq_12pred_7datasetfixed_with_augs' 
+exp_name = 'subgoal_16pred_8step_7datasetfixed_with_augs' # 'subgoal_3_pcl_seq_12pred_7datasetfixed_with_augs' 
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -54,7 +54,7 @@ projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
 n_datapoints = 2520 # 2*2*1800 # the desired numer of datapoints after augmentation
 n_raw_trajectories = 7 # the number of raw datapoints
 pred_horizon = 16 # 8 # 20
-subgoal_stepsize = 4
+subgoal_stepsize = 8
 num_epochs = 750
 target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
 dataset_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery' # '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'

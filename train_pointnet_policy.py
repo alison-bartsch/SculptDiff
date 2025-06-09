@@ -11,12 +11,8 @@ import os
 import numpy as np
 import torch
 
-# import wandb
-
-
-
 # exp name
-exp_name = 'pointnet_16pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
+exp_name = 'pointnet_nopretraining_16pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -185,7 +181,7 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
                 lr_scheduler.step()
 
                 # update Exponential Moving Average of the model weights
-                ema.step(nets) # due to older version of diffusers
+                ema.step(nets.parameters())
 
                 # logging
                 loss_cpu = loss.item()
