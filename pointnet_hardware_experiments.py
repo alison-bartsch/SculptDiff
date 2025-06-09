@@ -67,10 +67,7 @@ def sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_schedul
         # pass the point cloud through Point-BERT to get the latent representation
         state = torch.from_numpy(pointcloud).to(torch.float32)
         states = torch.unsqueeze(state, 0).to(device)
-        print("\nStates shape: ", states.shape)
         tokenized_states, _  = pointnet_encoder(states)
-        print("tokenized_states shape: ", tokenized_states.shape)
-        print("other shape: ", _.shape)
         pcl_embed = projection_head(tokenized_states)
         pointcloud_features = pcl_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
 
@@ -390,7 +387,7 @@ if __name__ == '__main__':
     centered_action = False
     pred_horizon = 16 
     execute_horizon = 16 
-    collision_check = False
+    collision_check = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
