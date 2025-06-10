@@ -230,6 +230,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     in_progress = True
     while in_progress:
         naction, total_time = sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_scheduler, noise_pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device)
+        og_nagent_pos = nagent_pos.detach().clone()
+        og_pointcloud = pointcloud.copy()
         planning_time_list.append(total_time)
 
         # execute N actions before replanning
@@ -253,7 +255,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
                 while collision and n_checks < 10:
                     n_checks += 1
                     print("\nCollision detected, replanning...")
-                    naction, total_time = sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_scheduler, noise_pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device)
+                    naction, total_time = sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_scheduler, noise_pred_net, og_pointcloud, numpy_goal, og_nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device)
                     pred_action = naction[0]
                     termination_pred = pred_action[:,7]
                     action_pred = (pred_action[:,0:7] + 1.0) / 2.0

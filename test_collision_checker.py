@@ -52,15 +52,18 @@ def check_finger_collision(action7d, pcl, vis=False):
     # cylinder2.translate([0.04, 0, 0])  # Move the second cylinder to the right
     cylinder2.translate([0.05, 0, 0])  # Move the second cylinder to the right
 
+    # deepcopy action 
+    action = np.copy(action7d)
+
     # make scaling adjustments
-    action7d[0] += 0.03
-    action7d[1] -= 0.025
-    action7d[2] -= 0.04
-    action7d[5] += 90
+    action[0] += 0.03
+    action[1] -= 0.025
+    action[2] -= 0.04
+    action[5] += 90
 
     # Apply the action7d transformations
-    translation = action7d[:3]  # x, y, z translation
-    rotation = action7d[3:6]  # roll, pitch, yaw in degrees
+    translation = action[:3]  # x, y, z translation
+    rotation = action[3:6]  # roll, pitch, yaw in degrees
     rotation_matrix = o3d.geometry.get_rotation_matrix_from_xyz(np.radians(rotation))
 
     cylinder1.rotate(rotation_matrix, center=(0, 0, 0))  # Apply rotation around the origin
