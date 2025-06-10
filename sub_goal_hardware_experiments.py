@@ -236,8 +236,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
     # visualize observation vs goal cloud
     pcl = o3d.geometry.PointCloud()
-    pcl.points = o3d.utility.Vector3dVector(pointcloud)
-    pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
+    pcl.points = o3d.utility.Vector3dVector(unnorm_pcl)
+    pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(unnorm_pcl),1)))
     # goal_pcl = o3d.geometry.PointCloud()
     # goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
     # goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
@@ -299,6 +299,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             print("\nSingle-step action: ", unnorm_a)
             terminate = termination_pred[j]
 
+            # TODO: uncomment after debugging
             # check for collision with the point cloud if the initial piercing actions have been executed
             if iter > 6 and collision_check:
                 collision = check_finger_collision(unnorm_a, pcl, vis=False)
@@ -327,6 +328,9 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
             # wait here
             time.sleep(3)
+
+            # # TODO: comment after debugging
+            # collision = check_finger_collision(unnorm_a, pcl, vis=True)
 
             # open the gripper
             # fa.open_gripper(block=True)
@@ -361,8 +365,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
             # visualize observation vs goal cloud
             pcl = o3d.geometry.PointCloud()
-            pcl.points = o3d.utility.Vector3dVector(pointcloud)
-            pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
+            pcl.points = o3d.utility.Vector3dVector(unnorm_pcl)
+            pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(unnorm_pcl),1)))
             goal_pcl = o3d.geometry.PointCloud()
             goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
             goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))

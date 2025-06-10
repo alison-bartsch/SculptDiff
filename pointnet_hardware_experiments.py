@@ -203,8 +203,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
     # visualize observation vs goal cloud
     pcl = o3d.geometry.PointCloud()
-    pcl.points = o3d.utility.Vector3dVector(pointcloud)
-    pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
+    pcl.points = o3d.utility.Vector3dVector(unnorm_pcl)
+    pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(unnorm_pcl),1)))
     goal_pcl = o3d.geometry.PointCloud()
     goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
     goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
@@ -307,8 +307,8 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
             # visualize observation vs goal cloud
             pcl = o3d.geometry.PointCloud()
-            pcl.points = o3d.utility.Vector3dVector(pointcloud)
-            pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
+            pcl.points = o3d.utility.Vector3dVector(unnorm_pcl)
+            pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(unnorm_pcl),1)))
             goal_pcl = o3d.geometry.PointCloud()
             goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
             goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))

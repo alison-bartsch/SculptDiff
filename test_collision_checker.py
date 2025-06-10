@@ -52,6 +52,12 @@ def check_finger_collision(action7d, pcl, vis=False):
     # cylinder2.translate([0.04, 0, 0])  # Move the second cylinder to the right
     cylinder2.translate([0.05, 0, 0])  # Move the second cylinder to the right
 
+    # make scaling adjustments
+    action7d[0] += 0.03
+    action7d[1] -= 0.025
+    action7d[2] -= 0.04
+    action7d[5] += 90
+
     # Apply the action7d transformations
     translation = action7d[:3]  # x, y, z translation
     rotation = action7d[3:6]  # roll, pitch, yaw in degrees
@@ -64,22 +70,23 @@ def check_finger_collision(action7d, pcl, vis=False):
 
     # visualize the transformed gripper mesh
     if vis:
-        # # create a red point cloud that is a line in the x direction
-        # line_points = np.zeros((100, 3))
-        # line_points[:, 0] = np.linspace(-2, 2, 100)  # x-axis line from -0.02 to 0.02
-        # line_pcl = o3d.geometry.PointCloud()
-        # line_pcl.points = o3d.utility.Vector3dVector(line_points)
-        # line_pcl.paint_uniform_color([1, 0, 0])  # Set color to red
-        # # create a line in open3d along the y-axis
-        # line_points_y = np.zeros((100, 3))
-        # line_points_y[:, 1] = np.linspace(-2, 2, 100)  # y-axis line from -0.02 to 0.02
-        # line_pcl_y = o3d.geometry.PointCloud()
-        # line_pcl_y.points = o3d.utility.Vector3dVector(line_points_y)
-        # line_pcl_y.paint_uniform_color([0, 1, 0])  # Set color to green
-        # o3d.visualization.draw_geometries([cylinder1, cylinder2, pcl, line_pcl, line_pcl_y])
+        # create a red point cloud that is a line in the x direction
+        line_points = np.zeros((100, 3))
+        line_points[:, 0] = np.linspace(0.6, 2, 100)  # x-axis line from -0.02 to 0.02
+        line_pcl = o3d.geometry.PointCloud()
+        line_pcl.points = o3d.utility.Vector3dVector(line_points)
+        line_pcl.paint_uniform_color([1, 0, 0])  # Set color to red
+        # create a line in open3d along the y-axis
+        line_points_y = np.zeros((100, 3))
+        line_points_y[:, 1] = np.linspace(0, 2, 100)  # y-axis line from -0.02 to 0.02
+        line_points_y[:, 0] = 0.6*np.ones(100)
+        line_pcl_y = o3d.geometry.PointCloud()
+        line_pcl_y.points = o3d.utility.Vector3dVector(line_points_y)
+        line_pcl_y.paint_uniform_color([0, 1, 0])  # Set color to green
+        o3d.visualization.draw_geometries([cylinder1, cylinder2, pcl, line_pcl, line_pcl_y])
 
 
-        o3d.visualization.draw_geometries([cylinder1, cylinder2, pcl])
+        # o3d.visualization.draw_geometries([cylinder1, cylinder2, pcl])
 
     # check size of the point cloud, if more than 250 points, downsample it to 250 points
     if len(pcl.points) > 250:
@@ -92,7 +99,7 @@ def check_finger_collision(action7d, pcl, vis=False):
     collision_count = c1_collision_count + c2_collision_count
 
     # return True if either finger collides with the point cloud
-    if collision_count > 2:  # threshold for collision detection
+    if collision_count > 5:  # threshold for collision detection
         print("Collision count: ", collision_count)
         return True
     else:
