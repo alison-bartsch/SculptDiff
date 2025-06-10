@@ -102,7 +102,7 @@ def check_finger_collision(action7d, pcl, vis=False):
     collision_count = c1_collision_count + c2_collision_count
 
     # return True if either finger collides with the point cloud
-    if collision_count > 5:  # threshold for collision detection
+    if collision_count > 6:  # threshold for collision detection
         print("Collision count: ", collision_count)
         return True
     else:
