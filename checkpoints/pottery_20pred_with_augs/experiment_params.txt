@@ -1,1 +1,0 @@
-{'exp_name': 'pottery_20pred_with_augs', 'n_datapoints': 3600, 'n_raw_trajectories': 5, 'pred_horizon': 20, 'center_actions': False, 'n_epochs': 750, 'dataset': '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'}
