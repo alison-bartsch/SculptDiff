@@ -1,7 +1,4 @@
 from policy import *
-from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
-from diffusers.training_utils import EMAModel
-from diffusers.optimization import get_scheduler
 from tqdm.auto import tqdm
 from pointBERT.tools import builder
 from pointBERT.utils.config import cfg_from_yaml_file
@@ -25,18 +22,14 @@ device = torch.device('cuda')
 config = cfg_from_yaml_file('pointBERT/cfgs/PointTransformer.yaml')
 model_config = config.model
 pointbert_encoder = builder.model_builder(model_config)
-# pointbert_encoder2 = builder.model_builder(model_config)
 weights_path = 'pointBERT/point-BERT-weights/Point-BERT.pth'
 pointbert_encoder.load_model_from_ckpt(weights_path)
 pointbert_encoder.to(device)
-# pointbert_encoder2.load_model_from_ckpt(weights_path)
-# pointbert_encoder2.to(device)
 
 # setup the projection head
 encoded_dim = 768 
 latent_dim = 512
 projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
-# projection_head2 = EncoderHead(encoded_dim, latent_dim).to(device)
 
 # define the dataloader
 n_datapoints = 2520 # 2*2*1800 # the desired numer of datapoints after augmentation
@@ -45,10 +38,8 @@ pred_horizon = 16 # 12 # 8 # 20
 num_epochs = 2000 # 1500 # 750
 target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
 dataset_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery' # '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
-# test_dataset_path = "ClayDemoDataset/" + str(target_shape) + "/Test" 
 center_actions = False
 dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
-# dataset = SubGoalClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions, subgoal_stepsize=5)
 dataloader = torch.utils.data.DataLoader(
     dataset,
     batch_size=8, # 64
@@ -70,19 +61,6 @@ exp_params = {'exp_name': exp_name,
 with open(ckpt_dir + '/experiment_params.txt', 'w') as f:
         f.write(str(exp_params))
 
-# define the noise scheduler
-num_diffusion_iters = 100
-noise_scheduler = DDPMScheduler(
-    num_train_timesteps=num_diffusion_iters,
-    # the choise of beta schedule has big impact on performance
-    # we found squared cosine works the best
-    beta_schedule='squaredcos_cap_v2',
-    # clip output to [-1,1] to improve stability
-    clip_sample=True,
-    # our network predicts noise (instead of denoised action)
-    prediction_type='epsilon'
-)
-
 # define parameters
 pcl_feature_dim = 512
 lowdim_obs_dim = 8 
@@ -100,6 +78,13 @@ optimizer = torch.optim.AdamW(
            list(pointbert_encoder.parameters()) +
            list(projection_head.parameters()),
     lr=1e-4, weight_decay=1e-6)
+
+# create lr scheduler that decreases the learning rate by a factor of 0.1 every 500 epochs after the first 250 epochs
+lr_scheduler = torch.optim.lr_scheduler.StepLR(
+    optimizer,
+    step_size=500,
+    gamma=0.1,
+    last_epoch=250)
 
 best_loss = 1e3
 with tqdm(range(num_epochs), desc='Epoch') as tglobal:
@@ -149,6 +134,8 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
                 optimizer.step()
                 optimizer.zero_grad()
 
+                # update the learning rate
+                lr_scheduler.step()
 
                 # logging
                 loss_cpu = loss.item()
@@ -163,26 +150,13 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
 
                 # state dict pointbert
                 torch.save(pointbert_encoder.state_dict(), join(ckpt_dir, 'pointbert_statedict'))
-                # torch.save(nets['pointbert_encoder2'].state_dict(), join(ckpt_dir, 'pointbert2_statedict'))
                 
                 # projection head
                 checkpoint = {'encoder_head': projection_head}
                 torch.save(checkpoint, join(ckpt_dir, 'encoder_best_checkpoint'))
-                # checkpoint = {'encoder_head2': nets['projection_head2']}
-                # torch.save(checkpoint, join(ckpt_dir, 'encoder2_best_checkpoint'))
 
                 # noise_pred_net
                 noise_checkpoint = {'pred_net': pred_net}
                 torch.save(noise_checkpoint, join(ckpt_dir, 'action_pred_best_checkpoint'))
 
         tglobal.set_postfix(loss=np.mean(epoch_loss))
-
-# # Weights of the EMA model
-# # is used for inference
-# ema_nets = nets
-# ema.copy_to(ema_nets.parameters())
-
-
-
-
-# RegressionConditionalUnet1D
