@@ -2,9 +2,9 @@ import numpy as np
 import open3d as o3d
 from tqdm import tqdm
 
-def create_grippers(action7d, ee_dist=0.05, color=[0.8, 0.8, 0.8]):
+def create_grippers(action7d, ee_dist=0.05, color=[0.8, 0.8, 0.8], cylinder_radius=0.006):
     # Create two cylinders for the gripper fingers
-    cylinder_radius = 0.006 #4 # 4  # 8mm diameter
+    # cylinder_radius = 0.006 #4 # 4  # 8mm diameter
     cylinder_length = 0.045  # 45mm length
     cylinder1 = o3d.geometry.TriangleMesh.create_cylinder(radius=cylinder_radius, height=cylinder_length)
     cylinder1.compute_vertex_normals()
@@ -17,7 +17,8 @@ def create_grippers(action7d, ee_dist=0.05, color=[0.8, 0.8, 0.8]):
     cylinder2.translate([-cylinder_length / 2, 0, 0])  # Center the cylinder at the origin
     cylinder2.rotate(o3d.geometry.get_rotation_matrix_from_xyz((0, 0, np.pi / 2)))  # Rotate to align with the y-axis
     # cylinder2.translate([0.04, 0, 0])  # Move the second cylinder to the right
-    cylinder2.translate([ee_dist, 0, 0])  # Move the second cylinder to the right
+    cylinder2.translate([-0.5*ee_dist, 0, 0])  # Move the second cylinder to the right
+    cylinder1.translate([0.5*ee_dist, 0, 0])  # Move the first cylinder to the left
 
     # Apply the action7d transformations
     translation = action7d[:3]  # x, y, z translation
