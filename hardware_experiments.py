@@ -189,7 +189,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
     unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
     # center and scale pointcloud
-    pointcloud = (unnorm_pcl.copy() - ctr) * 10
+    pointcloud = (np.copy(unnorm_pcl) - ctr) * 10
 
     # save the point clouds from each camera
     o3d.io.write_point_cloud(save_path + '/cam2_pcl0.ply', pc2)
@@ -198,9 +198,9 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     o3d.io.write_point_cloud(save_path + '/cam5_pcl0.ply', pc5)
 
     # center the goal based on the goal center
-    numpy_goal = (raw_goal.copy() - ctr) * 10.0
+    numpy_goal = (np.copy(raw_goal) - ctr) * 10.0
     # scale distance metric goal differently 
-    dist_goal = numpy_goal.copy()
+    dist_goal = np.copy(numpy_goal)
 
     # visualize observation vs goal cloud
     pcl = o3d.geometry.PointCloud()
@@ -218,12 +218,24 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     cv2.imwrite(save_path + '/rgb4_state0.jpg', rgb4)
     cv2.imwrite(save_path + '/rgb5_state0.jpg', rgb5)
 
+    print("\nMax unnorm pcl: ", np.max(unnorm_pcl, axis=0))
+    print("\nMax raw goal: ", np.max(raw_goal, axis=0))
+
     # get the distance metrics between the point cloud and goal
     dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goal),
                     'EMD': emd(unnorm_pcl, raw_goal),
                     'HAUSDORFF': hausdorff(unnorm_pcl, raw_goal)}
 
     print("\nDists: ", dist_metrics)
+
+    # calculate the dist metrics if the pcls are centered
+    ctr_pcl = unnorm_pcl.copy() - np.mean(unnorm_pcl, axis=0)
+    ctr_goal = raw_goal.copy() - np.mean(raw_goal, axis=0)
+    centered_dists = {'CD': chamfer(ctr_pcl, ctr_goal),
+                    'EMD': emd(ctr_pcl, ctr_goal),
+                    'HAUSDORFF': hausdorff(ctr_pcl, ctr_goal)}
+    print("\nCentered Dists: ", centered_dists)
+
     with open(save_path + '/dist_metrics_0.txt', 'w') as f:
         f.write(str(dist_metrics))
 
@@ -296,7 +308,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             rgb5, _, pc5, _ = cam5._get_next_frame()
             unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
             # center and scale pointcloud
-            pointcloud = (unnorm_pcl.copy() - ctr) * 10
+            pointcloud = (np.copy(unnorm_pcl) - ctr) * 10
 
             # save the point clouds from each camera
             o3d.io.write_point_cloud(save_path + '/cam2_pcl' + str(iter) + '.ply', pc2)
@@ -305,9 +317,9 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             o3d.io.write_point_cloud(save_path + '/cam5_pcl' + str(iter) + '.ply', pc5)
 
             # center the goal based on the point cloud center
-            numpy_goal = (raw_goal.copy() - ctr) * 10.0
+            numpy_goal = (np.copy(raw_goal) - ctr) * 10.0
             # scale distance metric goal differently 
-            dist_goal = numpy_goal.copy()
+            dist_goal = np.copy(numpy_goal)
 
             # visualize observation vs goal cloud
             pcl = o3d.geometry.PointCloud()
@@ -334,6 +346,14 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             print("\nDists: ", dist_metrics)
             with open(save_path + '/dist_metrics_' + str(iter) + '.txt', 'w') as f:
                 f.write(str(dist_metrics))
+
+            # calculate the dist metrics if the pcls are centered
+            ctr_pcl = unnorm_pcl.copy() - np.mean(unnorm_pcl, axis=0)
+            ctr_goal = raw_goal.copy() - np.mean(raw_goal, axis=0)
+            centered_dists = {'CD': chamfer(ctr_pcl, ctr_goal),
+                            'EMD': emd(ctr_pcl, ctr_goal),
+                            'HAUSDORFF': hausdorff(ctr_pcl, ctr_goal)}
+            print("\nCentered Dists: ", centered_dists)
             
             # if that action was predicted to be the final action, then terminate the experiment
             if terminate > 0:
@@ -386,12 +406,12 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_16pred_7datasetfixed_with_augs'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_long_epochs_16pred_7datasetfixed_with_augs'
     goal_path = '/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
     execute_horizon = 16 
-    collision_check = True
+    collision_check = False
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
