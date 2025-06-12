@@ -9,7 +9,7 @@ def vis_gripper_sequence(action_seq, n_actions=16):
     Each action is a 7D vector representing the gripper state.
     '''
     # create a list of n_actions discrete colors on the viridis colormap scale
-    color_list = plt.cm.rainbow(np.linspace(0, 1, n_actions))[:, :3]  # RGB colors
+    color_list = plt.cm.gist_rainbow(np.linspace(0, 1, n_actions))[:, :3]  # RGB colors
 
     gripper_meshes = []
     for a in range(n_actions):
