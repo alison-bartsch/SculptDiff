@@ -11,7 +11,7 @@ import torch
 
 
 # exp name
-exp_name = 'pottery_long_epochs_16pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
+exp_name = 'regression_16pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -83,8 +83,7 @@ optimizer = torch.optim.AdamW(
 lr_scheduler = torch.optim.lr_scheduler.StepLR(
     optimizer,
     step_size=500,
-    gamma=0.1,
-    last_epoch=250)
+    gamma=0.1)
 
 best_loss = 1e3
 with tqdm(range(num_epochs), desc='Epoch') as tglobal:
