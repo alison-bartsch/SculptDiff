@@ -410,8 +410,8 @@ if __name__ == '__main__':
     goal_path = '/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
-    execute_horizon = 16 
-    collision_check = False
+    execute_horizon = 4 
+    collision_check = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------

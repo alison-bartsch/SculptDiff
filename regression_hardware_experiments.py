@@ -89,6 +89,9 @@ def regression_generate_actions(pointbert, projection_head, pred_net, pointcloud
         noisy_action = torch.randn(
             (B, pred_horizon, action_dim), device=device)
         
+        print("Noisy action shape: ", noisy_action.shape)
+        print("obs cond shape: ", obs_cond.shape)
+        
         # predict the action
         predicted_actions = pred_net(
             noisy_action, 
@@ -406,19 +409,19 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
 
-    exp_save = 'Experiments/Exp' + str(exp_num)
+    exp_save = 'Experiments/Regression_Exp' + str(exp_num)
 
     # check to make sure the experiment number is not already in use, if it is, increment the number to ensure no save overwrites
     while os.path.exists(exp_save):
         exp_num += 1
-        exp_save = 'Experiments/Exp' + str(exp_num)
+        exp_save = 'Experiments/Regression_Exp' + str(exp_num)
 
     # make the experiment folder
     os.mkdir(exp_save)
 
     # make the experiment folder for the video save
-    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/Exp' + str(exp_num))
-    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/Exp' + str(exp_num)
+    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/Regression_Exp' + str(exp_num))
+    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/Regression_Exp' + str(exp_num)
 
     # make the experiment dictionary with important information for the experiment run
     exp_dict = {'goal: ', goal_shape,
