@@ -89,9 +89,6 @@ def regression_generate_actions(pointbert, projection_head, pred_net, pointcloud
         noisy_action = torch.randn(
             (B, pred_horizon, action_dim), device=device)
         
-        print("Noisy action shape: ", noisy_action.shape)
-        print("obs cond shape: ", obs_cond.shape)
-        
         # predict the action
         predicted_actions = pred_net(
             noisy_action, 
@@ -157,7 +154,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
     # load pred_net from ckpt_dir
     pred_checkpoint = torch.load(ckpt_dir + '/action_pred_best_checkpoint.zip', map_location=torch.device('cpu'))
-    pred_net = pred_checkpoint['pred_net']
+    pred_net = pred_checkpoint['pred_net'].to(device)
 
     # load in the goal
     raw_goal = np.load(goal_path)
