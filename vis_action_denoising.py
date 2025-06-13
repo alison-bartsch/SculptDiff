@@ -2,7 +2,9 @@ import time
 import torch
 import numpy as np
 import open3d as o3d
+from matplotlib import pyplot as plt
 from pcl_utils import *
+from vis_trajectory_with_collision import make_gif
 from action_sequence_vis import vis_gripper_sequence
 from test_collision_checker import check_finger_collision
 from pointBERT.tools import builder
@@ -12,7 +14,10 @@ from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
 # parameters defined
 ckpt_dir = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_long_epochs_16pred_7datasetfixed_with_augs'
-goal_path = '/home/alison/Documents/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory0/unnormalized_pointcloud64.npy'
+traj_goal_pairs = [(0, 64), (1, 22), (2, 33), (3, 32), (4, 22), (5, 24), (6, 33)]
+traj_idx = 6 # (0, 64) (1, 22) (2, 33) (3, 32) (4, 22) (5, 24) (6, 33)
+goal_idx = 33 
+goal_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory' + str(traj_idx) + '/unnormalized_pointcloud' + str(goal_idx) + '.npy'
 centered_action = False
 pred_horizon = 16 
 execute_horizon = 16 
@@ -73,7 +78,7 @@ raw_goal = np.load(goal_path)
 
 
 # iterate through the observations from the goal trajectory with a step size of execute_horizon
-for i in range(0,64, execute_horizon):
+for i in range(0,goal_idx, execute_horizon):
     # load in the goal observation point cloud
     unnorm_pcl = np.load('/home/alison/Documents/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory0/unnormalized_pointcloud' + str(i) + '.npy')
     ctr = np.mean(raw_goal, axis=0)
@@ -110,6 +115,7 @@ for i in range(0,64, execute_horizon):
         noise_scheduler.set_timesteps(num_diffusion_iters)
 
         for k in noise_scheduler.timesteps:
+            
             # predict noise
             noise_pred = noise_pred_net(
                 sample=naction,
@@ -136,6 +142,7 @@ for i in range(0,64, execute_horizon):
 
             if k == 99 and i == 0:
                 # initialize the visualizer
+                img_sequence = []
                 vis = o3d.visualization.Visualizer()
                 vis.create_window(width=1920, height=1080)
 
@@ -162,18 +169,37 @@ for i in range(0,64, execute_horizon):
 
                 o3d_pointcloud = o3d.geometry.PointCloud()
                 o3d_pointcloud.points = o3d.utility.Vector3dVector(unnorm_pcl)
-                o3d_pointcloud.colors = o3d.utility.Vector3dVector(np.array([[0.25, 0.25, .25]] * unnorm_pcl.shape[0]))  # Blue color for point cloud
+
+                # assign colors to each point in the point cloud based on the z-height
+                # specifically the binary colormap in matplotlib
+                z_heights = unnorm_pcl[:, 2]
+                z_heights = (z_heights - np.min(z_heights)) / (np.max(z_heights) - np.min(z_heights))
+                colormap = plt.get_cmap('binary')
+                colors = colormap(z_heights)[:, :3]  # Get RGB values
+                o3d_pointcloud.colors = o3d.utility.Vector3dVector(colors)
+
 
                 vis.add_geometry(o3d_pointcloud)
                 
                 for elem in gripper_list:
                     vis.add_geometry(elem)
 
+                ctr.convert_from_pinhole_camera_parameters(parameters, True)
                 ctr.set_zoom(1.15)
+
+                # Capture the screen
+                img = vis.capture_screen_float_buffer()
+                
                 time.sleep(0.025)
             else:
                 # update the geometries to modify
                 o3d_pointcloud.points = o3d.utility.Vector3dVector(unnorm_pcl)
+
+                z_heights = unnorm_pcl[:, 2]
+                z_heights = (z_heights - np.min(z_heights)) / (np.max(z_heights) - np.min(z_heights))
+                colormap = plt.get_cmap('binary')
+                colors = colormap(z_heights)[:, :3]  # Get RGB values
+                o3d_pointcloud.colors = o3d.utility.Vector3dVector(colors)
 
                 new_gripper_list = vis_gripper_sequence(intermediate_action_pred)
 
@@ -187,10 +213,20 @@ for i in range(0,64, execute_horizon):
                     vis.update_geometry(elem)
                 vis.poll_events()
                 vis.update_renderer()
+
+                # Capture the screen
+                img = vis.capture_screen_float_buffer()
+                img_sequence.append(img)
+
+                if k == 0:
+                    for _ in range(10):
+                        img_sequence.append(img)
+
                 time.sleep(0.025)
 
         # unnormalize action
         naction = naction.detach().to('cpu').numpy()
+
 
     time.sleep(0.5)
 
@@ -205,3 +241,10 @@ for i in range(0,64, execute_horizon):
 
         # update nagent_pos to be the new position
         nagent_pos = torch.from_numpy(pred_action[j]).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
+
+# close the visualizer
+vis.destroy_window()
+
+# save the images to a gifs
+print("Generated {} images for the animation.".format(len(img_sequence)))
+make_gif(img_sequence, filename='gifs/sculptdiff_denoising_traj' + str(traj_idx) + '.gif', duration=100)

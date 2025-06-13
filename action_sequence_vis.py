@@ -16,7 +16,7 @@ def vis_gripper_sequence(action_seq, n_actions=16):
         action = action_seq[a]
 
         # make scaling adjustments
-        action[0] += 0.03
+        action[0] += 0.01 # 0.03
         # action[1] -= 0.025
         action[2] -= 0.04
         action[5] += 90
@@ -32,7 +32,7 @@ def vis_gripper_sequence(action_seq, n_actions=16):
         # create 5x meshes to show the squeeze path
         for i in range(5):
             # create a gripper mesh for each color in the list
-            cylinder1, cylinder2 = create_grippers(action, color=elem_color_list[i], ee_dist=ees[i], cylinder_radius=0.004)
+            cylinder1, cylinder2 = create_grippers(action, color=elem_color_list[i], ee_dist=ees[i], cylinder_radius=0.003)
             gripper_meshes.append(cylinder1)
             gripper_meshes.append(cylinder2)
 

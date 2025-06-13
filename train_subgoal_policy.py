@@ -55,7 +55,7 @@ n_datapoints = 2520 # 2*2*1800 # the desired numer of datapoints after augmentat
 n_raw_trajectories = 7 # the number of raw datapoints
 pred_horizon = 16 # 8 # 20
 subgoal_stepsize = 4
-num_epochs = 500 # 750
+num_epochs = 2000 # 750
 discount_factor = 0.9 # if 1.0 then no discounting
 target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
 dataset_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery' # '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
@@ -131,7 +131,7 @@ optimizer = torch.optim.AdamW(
 lr_scheduler = get_scheduler(
     name='cosine',
     optimizer=optimizer,
-    num_warmup_steps=100,
+    num_warmup_steps=500,
     num_training_steps=len(dataloader) * num_epochs
 )
 
