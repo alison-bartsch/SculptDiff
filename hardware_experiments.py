@@ -406,11 +406,11 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_long_epochs_16pred_7datasetfixed_with_augs'
-    goal_path = '/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory2/unnormalized_pointcloud33.npy'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_long_witheld_traj6_16pred_7datasetfixed_with_augs'
+    goal_path = '/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory6/unnormalized_pointcloud33.npy' # Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
-    execute_horizon = 4 
+    execute_horizon = 16
     collision_check = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------

@@ -60,7 +60,7 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     time.sleep(3)
     return intermediate_pose
 
-def subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, raw_goals, ctr, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device):
+def subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, raw_goals, ctr, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device, discounted):
     B = 1
     with torch.inference_mode():
         start = time.time()
@@ -75,7 +75,9 @@ def subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_schedu
         obs_list = [nagent_pos, pointcloud_features]
 
         # pass the goal cloud through Point-BERT and projection head
-        for subgoal in raw_goals:
+        # for subgoal in raw_goals:
+        for i in range(len(raw_goals)):
+            subgoal = raw_goals[i]
             print("iterating through raw goals")
             np_goal = (subgoal - ctr) * 10.0
             goal = np_goal.copy()
@@ -83,6 +85,9 @@ def subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_schedu
             goals = torch.unsqueeze(goal, 0).to(device)
             tokenized_goals = pointbert(goals)
             goal_embed = projection_head(tokenized_goals)
+            if discounted:
+                discount_factor = 0.9
+                goal_embed = discount_factor ** (i+1) * goal_embed
             goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
             obs_list.append(goalcloud_features)
 
@@ -141,7 +146,7 @@ def subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_schedu
 # 	fa.goto_gripper(d, force=60.0)
 # 	time.sleep(3)
 
-def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, sub_goal_step, sub_goal_list, collision_check):
+def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, sub_goal_step, sub_goal_list, collision_check, discounted):
     '''
     '''
     # define diffusion parameters
@@ -283,7 +288,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             with open(save_path + '/dist_metrics_0.txt', 'w') as f:
                 f.write(str(dist_metrics))
 
-        naction, total_time = subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, raw_goals, ctr, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device)
+        naction, total_time = subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, raw_goals, ctr, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device, discounted)
         og_nagent_pos = nagent_pos.detach().clone()
         og_pointcloud = pointcloud.copy()
         planning_time_list.append(total_time)
@@ -310,7 +315,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
                 while collision and n_checks < 10:
                     n_checks += 1
                     print("\nCollision detected, replanning...")
-                    naction, total_time = subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, og_pointcloud, raw_goals, ctr, og_nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device)
+                    naction, total_time = subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, og_pointcloud, raw_goals, ctr, og_nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device, discounted)
                     pred_action = naction[0]
                     termination_pred = pred_action[:,7]
                     action_pred = (pred_action[:,0:7] + 1.0) / 2.0
@@ -443,11 +448,12 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 10
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_long_epochs_16pred_8step_7datasetfixed_with_augs' 
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_long_epochs_discounted_16pred_4step_7datasetfixed_with_augs' 
     centered_action = False
-    sub_goal_step = 8
+    sub_goal_step = 4
     pred_horizon = 16
     collision_check = True
+    discounted = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -538,7 +544,7 @@ if __name__ == '__main__':
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, sub_goal_step, nested_sub_goal_list, collision_check))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, sub_goal_step, nested_sub_goal_list, collision_check, discounted))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, video_save_path, done_queue))
 
     main_thread.start()
