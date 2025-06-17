@@ -45,9 +45,9 @@ cam5 = vis.CameraClass(5)
 pcl_vis = vis.Vision3D()
 
 # create a list of poses
-action_list = ['/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory6/action7d_unnormalized22.npy',
-               '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory0/action7d_unnormalized1.npy',
-               '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory2/action7d_unnormalized11.npy']
+action_list = ['/ee_pcls/action0.npy',
+               '/ee_pcls/action1.npy',
+               '/ee_pcls/action2.npy']
 
 # get the camera extrinsics for each of the cameras
 ext1 = cam1.get_cam_extrinsics()
