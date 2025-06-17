@@ -146,10 +146,11 @@ for i in range(len(action_list)):
     cropped_clrs = np.asarray(pcd.colors)
     # remove points that are too dark (i.e. black)
     lab_colors = rgb2lab(cropped_clrs.reshape(-1, 1, 3))  # Convert to LAB color space
+    print("lab colors shape: ", lab_colors.shape)
     lightness = lab_colors[:, 0]  # Extract the lightness channel
     # threshold for lightness
     lightness_threshold = 70  # Adjust this threshold as needed
-    light_points = lightness > lightness_threshold
+    light_points = np.where(lightness > lightness_threshold)
     # filter the points and colors
     filtered_points = cropped_pts[light_points]
     filtered_colors = cropped_clrs[light_points]
