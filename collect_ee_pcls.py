@@ -144,7 +144,18 @@ for i in range(len(action_list)):
     # keep only the white points
     cropped_pts = np.asarray(pcd.points)
     cropped_clrs = np.asarray(pcd.colors)
-    # remove points that are too dark
+    # remove points that are too dark (i.e. black)
+    lab_colors = rgb2lab(cropped_clrs.reshape(-1, 1, 3))  # Convert to LAB color space
+    lightness = lab_colors[:, 0]  # Extract the lightness channel
+    # threshold for lightness
+    lightness_threshold = 70  # Adjust this threshold as needed
+    light_points = lightness > lightness_threshold
+    # filter the points and colors
+    filtered_points = cropped_pts[light_points]
+    filtered_colors = cropped_clrs[light_points]
+    cropped_pcd = o3d.geometry.PointCloud()
+    cropped_pcd.points = o3d.utility.Vector3dVector(filtered_points)
+    cropped_pcd.colors = o3d.utility.Vector3dVector(filtered_colors)
     o3d.visualization.draw_geometries([cropped_pcd])
     # assert False
     
