@@ -14,7 +14,7 @@ import torch
 
 
 # exp name
-exp_name = 'pottery_long_witheld_traj6_16pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
+exp_name = 'pottery_long_witheld_traj6_8pred_7datasetfixed_with_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -25,30 +25,24 @@ device = torch.device('cuda')
 config = cfg_from_yaml_file('pointBERT/cfgs/PointTransformer.yaml')
 model_config = config.model
 pointbert_encoder = builder.model_builder(model_config)
-# pointbert_encoder2 = builder.model_builder(model_config)
 weights_path = 'pointBERT/point-BERT-weights/Point-BERT.pth'
 pointbert_encoder.load_model_from_ckpt(weights_path)
 pointbert_encoder.to(device)
-# pointbert_encoder2.load_model_from_ckpt(weights_path)
-# pointbert_encoder2.to(device)
 
 # setup the projection head
 encoded_dim = 768 
 latent_dim = 512
 projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
-# projection_head2 = EncoderHead(encoded_dim, latent_dim).to(device)
 
 # define the dataloader
 n_datapoints = 2160 # 2520 # 2*2*1800 # the desired numer of datapoints after augmentation
 n_raw_trajectories = 6 # the number of raw datapoints
-pred_horizon = 16 # 12 # 8 # 20
+pred_horizon = 8 # 16 # 12 # 8 # 20
 num_epochs = 2000 # 1500 # 750
 target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
 dataset_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery' # '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
-# test_dataset_path = "ClayDemoDataset/" + str(target_shape) + "/Test" 
 center_actions = False
 dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
-# dataset = SubGoalClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions, subgoal_stepsize=5)
 dataloader = torch.utils.data.DataLoader(
     dataset,
     batch_size=8, # 64
