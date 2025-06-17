@@ -141,5 +141,5 @@ for i in range(len(action_list)):
     # move to observation pose
     fa.goto_pose(overhead_pose)
 
-    # save the ee point cloud
-    np.save('/ee_pcls/ee_pcl_' + str(i) + '.npy', np.asarray(pcd.points))
+    # # save the ee point cloud
+    # np.save('/ee_pcls/ee_pcl_' + str(i) + '.npy', np.asarray(pcd.points))
