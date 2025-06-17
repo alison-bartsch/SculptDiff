@@ -4,10 +4,11 @@ import random
 import numpy as np
 import open3d as o3d
 import pyrealsense2 as rs
-from robot_utils import *
+# from robot_utils import *
 from frankapy import FrankaArm
 from scipy.spatial.transform import Rotation
 import robomail.vision as vis
+from skimage.color import rgb2lab
 
 def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     """
@@ -44,10 +45,10 @@ cam5 = vis.CameraClass(5)
 # initialize the 3D vision code
 pcl_vis = vis.Vision3D()
 
-# create a list of poses
-action_list = ['/ee_pcls/action0.npy',
-               '/ee_pcls/action1.npy',
-               '/ee_pcls/action2.npy']
+# create a list of poses 
+action_list = ['ee_pcls/action0.npy',
+               'ee_pcls/action1.npy',
+               'ee_pcls/action2.npy']
 
 # get the camera extrinsics for each of the cameras
 ext1 = cam1.get_cam_extrinsics()
@@ -75,10 +76,10 @@ for i in range(len(action_list)):
     action = np.load(action_list[i])
 
     # execute the action
-    goto_grasp(fa, action[0], action[1], action[2], action[3], action[4], action[5], action[6])
+    goto_grasp(fa, action[0], action[1], action[2] + 0.1, action[3], action[4], action[5], action[6])
 
     # get point clouds
-    _, _, pc1, _ = cam1._get_next_frame()
+    # _, _, pc1, _ = cam1._get_next_frame()
     _, _, pc2, _ = cam2._get_next_frame()
     _, _, pc3, _ = cam3._get_next_frame()
     _, _, pc4, _ = cam4._get_next_frame()
@@ -93,9 +94,9 @@ for i in range(len(action_list)):
     pose_transform[0:3,3] = ee_pos
     # transform each cloud to world frame
     # pc1.transform(pose_transform).transform(self.camera_transforms[1])
-    pc1.transform(ext1).transform(pose_transform)
-    # handle calibration offsets
-    pc1.translate((-0.05,-0.025,-0.01))
+    # pc1.transform(ext1).transform(pose_transform)
+    # # handle calibration offsets
+    # pc1.translate((-0.05,-0.025,-0.01))
     pc2.transform(ext2)
     pc3.transform(ext3)
     pc4.transform(ext4)
@@ -105,8 +106,8 @@ for i in range(len(action_list)):
     pointcloud = o3d.geometry.PointCloud()
     pointcloud.points = pc5.points
     pointcloud.colors = pc5.colors
-    pointcloud.points.extend(pc1.points)
-    pointcloud.colors.extend(pc1.colors)
+    # pointcloud.points.extend(pc1.points)
+    # pointcloud.colors.extend(pc1.colors)
     pointcloud.points.extend(pc2.points)
     pointcloud.colors.extend(pc2.colors)
     pointcloud.points.extend(pc3.points)
@@ -119,13 +120,15 @@ for i in range(len(action_list)):
         nb_neighbors=20, std_ratio=2.0
     )
 
+    # o3d.visualization.draw_geometries([pointcloud])
+
     # based on the action, crop the point clouds to isolate the end-effector region
-    minz = action[2] - 0.05
-    maxz = action[2] + 0.05
-    minx = action[0] - 0.05
-    maxx = action[0] + 0.05
-    miny = action[1] - 0.05
-    maxy = action[1] + 0.05
+    minz = action[2] + 0.1 - 0.1
+    maxz = action[2] + 0.1 + 0.1
+    minx = action[0] - 0.1
+    maxx = action[0] + 0.1
+    miny = action[1] - 0.1
+    maxy = action[1] + 0.1
     points = np.asarray(pointcloud.points)
     colors = np.asarray(pointcloud.colors)
     ind_x = np.where((points[:, 0] > minx) & (points[:, 0] < maxx))
@@ -138,8 +141,15 @@ for i in range(len(action_list)):
     # visualize the point cloud
     o3d.visualization.draw_geometries([pcd])
 
+    # keep only the white points
+    cropped_pts = np.asarray(pcd.points)
+    cropped_clrs = np.asarray(pcd.colors)
+    # remove points that are too dark
+    o3d.visualization.draw_geometries([cropped_pcd])
+    # assert False
+    
     # move to observation pose
     fa.goto_pose(overhead_pose)
 
     # # save the ee point cloud
-    # np.save('/ee_pcls/ee_pcl_' + str(i) + '.npy', np.asarray(pcd.points))
+    # np.save('ee_pcls/finger_pcl' + str(i) + '.npy', np.asarray(pcd.points))

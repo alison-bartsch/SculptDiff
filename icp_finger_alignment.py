@@ -3,10 +3,10 @@ import open3d as o3d
 from test_collision_checker import create_grippers
 
 # load in the real-world point cloud of the fingers
-finger_pcl = np.load('/ee_pcls/finger_pcl0.npy')
+finger_pcl = np.load('ee_pcls/finger_pcl0.npy')
 
 # load in the corresponding end effector action
-action = np.load('/ee_pcls/action0.npy')
+action = np.load('ee_pcls/action0.npy')
 
 # create the synthetic end-effector point cloud based on the action
 finger_mesh = create_grippers(action, ee_dist=0.04, color=[0.8, 0.8, 0.8], cylinder_radius=0.004)
