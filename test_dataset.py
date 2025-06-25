@@ -61,12 +61,12 @@ class ClayDataset(torch.utils.data.Dataset):
         # mins = [0.5413, -0.04232, 0.1300, -360, -15, -90, 0.0005]
         # maxs = [0.6700, 0.08500, 0.1560, 360, 130, 90, 0.005]
 
-        # -------- min/max values for 7 demos from INSERT ------
+        # -------- min/max values for 7 demos from \Mar24_Bowl_Demos_Soft_Finger ------
         a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
         a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
 
 
-        # # ------- min/max values for 20 concave/convex demos -----
+        # # ------- min/max values for 20 concave/convex demos from \June18_Human_Demos -----
         # Action Mins:  [ 5.34147426e-01 -5.48177446e-02  1.27324785e-01 -3.59930863e+02
         # -1.00900854e+01 -1.79939238e+02  9.00000000e-03]
 
