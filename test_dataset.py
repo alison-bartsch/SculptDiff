@@ -60,8 +60,19 @@ class ClayDataset(torch.utils.data.Dataset):
     def _normalize_action(self, action):
         # mins = [0.5413, -0.04232, 0.1300, -360, -15, -90, 0.0005]
         # maxs = [0.6700, 0.08500, 0.1560, 360, 130, 90, 0.005]
+
+        # -------- min/max values for 7 demos from INSERT ------
         a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
         a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
+
+
+        # # ------- min/max values for 20 concave/convex demos -----
+        # Action Mins:  [ 5.34147426e-01 -5.48177446e-02  1.27324785e-01 -3.59930863e+02
+        # -1.00900854e+01 -1.79939238e+02  9.00000000e-03]
+
+        # Action Maxs:  [6.74862425e-01 8.70004414e-02 1.59956120e-01 3.59985867e+02
+        # 1.16749681e+01 1.79825982e+02 1.50000000e-02]
+
         norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
         norm_action = norm_action  * 2 - 1 # set to [-1, 1]
         return norm_action
