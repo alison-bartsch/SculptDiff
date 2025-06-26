@@ -1,0 +1,1 @@
+{'exp_name': 'new_data_16_pred', 'n_datapoints': 7200, 'n_raw_trajectories': 20, 'pred_horizon': 16, 'center_actions': False, 'n_epochs': 1000, 'dataset': '/home/alison/Documents/June18_Human_Demos_Train'}

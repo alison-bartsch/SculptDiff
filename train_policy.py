@@ -40,7 +40,7 @@ n_raw_trajectories = 20 # the number of raw datapoints
 pred_horizon = 16 # 16 # 12 # 8 # 20
 num_epochs = 1000 # 1500 # 750
 target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
-dataset_path = '/home/alison/Documents/June18_Human_Demos/pottery/Train' # '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
+dataset_path = '/home/alison/Documents/June18_Human_Demos_Train' # '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
 center_actions = False
 dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
 dataloader = torch.utils.data.DataLoader(
@@ -183,7 +183,7 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
             
             # save the model weights every 50 epochs
             mean_loss = np.mean(epoch_loss)
-            if mean_loss < best_loss and epoch_idx % 50 == 0:
+            if mean_loss < best_loss and epoch_idx % 10 == 0:
                 best_loss = mean_loss
                 print("\nSaving model weights with avg loss = ", mean_loss)
 
