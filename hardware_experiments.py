@@ -114,7 +114,7 @@ def sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noi
     return naction, end - start
 
 
-def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check):
+def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check):
     '''
     '''
     # define diffusion parameters
@@ -149,6 +149,11 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
         a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
         a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
 
+    # define initial joint rotation
+    joints = fa.get_joints()
+    ee_joint_pos = joints[6]
+
+
     qpos = np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04])
     qpos = (qpos - a_mins7d) / (a_maxs7d - a_mins7d)
     qpos = qpos * 2.0 - 1.0
@@ -176,7 +181,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
 
     # define observation pose
     pose = fa.get_pose()
-    observation_pose = np.array([0.6, 0, 0.325])
+    observation_pose = np.array([0.625, 0, 0.325]) # np.array([0.6, 0, 0.325])
     pose.translation = observation_pose
     fa.goto_pose(pose)
     
@@ -187,16 +192,25 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     planning_time_list = []
 
     # get the observation state
+    rgb1, _, pc1, _ = cam1._get_next_frame()
     rgb2, _, pc2, _ = cam2._get_next_frame()
     rgb3, _, pc3, _ = cam3._get_next_frame()
     rgb4, _, pc4, _ = cam4._get_next_frame()
     rgb5, _, pc5, _ = cam5._get_next_frame()
 
-    unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
+    # unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
+
+    # for 5x cameras, we need to get the ee pose
+    cur_pose = fa.get_pose()
+    translation = cur_pose.translation
+    rotation = cur_pose.rotation
+    _, _, _, _, _, unnorm_pcl, ctr = pcl_vis.crop_point_clouds_separately(pc1, pc2, pc3, pc4, pc5, color="Orange", ee_pos=translation, ee_rot=rotation, icp=True)
+                
     # center and scale pointcloud
     pointcloud = (np.copy(unnorm_pcl) - ctr) * 10
 
     # save the point clouds from each camera
+    o3d.io.write_point_cloud(save_path + '/cam1_pcl0.ply', pc1)
     o3d.io.write_point_cloud(save_path + '/cam2_pcl0.ply', pc2)
     o3d.io.write_point_cloud(save_path + '/cam3_pcl0.ply', pc3)
     o3d.io.write_point_cloud(save_path + '/cam4_pcl0.ply', pc4)
@@ -218,6 +232,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     # save observation
     np.save(save_path + '/pcl0.npy', pointcloud)
     np.save(save_path + '/center0.npy', ctr)
+    cv2.imwrite(save_path + '/rgb1_state0.jpg', rgb1)
     cv2.imwrite(save_path + '/rgb2_state0.jpg', rgb2)
     cv2.imwrite(save_path + '/rgb3_state0.jpg', rgb3)
     cv2.imwrite(save_path + '/rgb4_state0.jpg', rgb4)
@@ -302,20 +317,40 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             # move to intermediate_pose
             fa.goto_pose(intermediate_pose)
 
-            # move to observation pose
-            pose.translation = observation_pose
-            fa.goto_pose(pose)
+            # # move to observation pose
+            # pose.translation = observation_pose
+            # fa.goto_pose(pose)
+
+
+            # ------- added scrips from data collection to ensure ee rotation -----
+            intermediate_pose.translation = observation_pose.translation
+            fa.goto_pose(intermediate_pose, duration=7)
+            # unrotate the end-effector
+            cur_joints = fa.get_joints()
+            cur_joints[6] = ee_joint_pos
+            fa.goto_joints(cur_joints, duration=7)
+            # goto overehad pose
+            fa.goto_pose(observation_pose, duration=9)
 
             # get the observation state
+            rgb1, _, pc1, _ = cam1._get_next_frame()
             rgb2, _, pc2, _ = cam2._get_next_frame()
             rgb3, _, pc3, _ = cam3._get_next_frame()
             rgb4, _, pc4, _ = cam4._get_next_frame()
             rgb5, _, pc5, _ = cam5._get_next_frame()
-            unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
+            # unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
+
+            # for 5x cameras, we need to get the ee pose
+            cur_pose = fa.get_pose()
+            translation = cur_pose.translation
+            rotation = cur_pose.rotation
+            _, _, _, _, _, unnorm_pcl, ctr = pcl_vis.crop_point_clouds_separately(pc1, pc2, pc3, pc4, pc5, color="Orange", ee_pos=translation, ee_rot=rotation, icp=True)
+            
             # center and scale pointcloud
             pointcloud = (np.copy(unnorm_pcl) - ctr) * 10
 
             # save the point clouds from each camera
+            o3d.io.write_point_cloud(save_path + '/cam1_pcl' + str(iter) + '.ply', pc1)
             o3d.io.write_point_cloud(save_path + '/cam2_pcl' + str(iter) + '.ply', pc2)
             o3d.io.write_point_cloud(save_path + '/cam3_pcl' + str(iter) + '.ply', pc3)
             o3d.io.write_point_cloud(save_path + '/cam4_pcl' + str(iter) + '.ply', pc4)
@@ -338,6 +373,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             # save observation
             np.save(save_path + '/pcl' + str(iter) + '.npy', pointcloud)
             np.save(save_path + '/center' + str(iter) + '.npy', ctr)
+            cv2.imwrite(save_path + '/rgb1_state' + str(iter) + '.jpg', rgb1)
             cv2.imwrite(save_path + '/rgb2_state' + str(iter) + '.jpg', rgb2)
             cv2.imwrite(save_path + '/rgb3_state' + str(iter) + '.jpg', rgb3)
             cv2.imwrite(save_path + '/rgb4_state' + str(iter) + '.jpg', rgb4)
@@ -412,7 +448,7 @@ if __name__ == '__main__':
     exp_num = 1
     goal_shape = 'pottery' 
     model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_long_witheld_traj6_16pred_7datasetfixed_with_augs'
-    goal_path = '/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory6/unnormalized_pointcloud33.npy' # Trajectory2/unnormalized_pointcloud33.npy'
+    goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
     execute_horizon = 16
@@ -454,6 +490,7 @@ if __name__ == '__main__':
     fa.goto_gripper(0.04)
 
     # initialize the cameras
+    cam1 = vis.CameraClass(1)
     cam2 = vis.CameraClass(2)
     cam3 = vis.CameraClass(3)
     cam4 = vis.CameraClass(4)
@@ -474,7 +511,7 @@ if __name__ == '__main__':
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, video_save_path, done_queue))
 
     main_thread.start()
