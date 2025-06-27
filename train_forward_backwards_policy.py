@@ -6,31 +6,15 @@ from tqdm.auto import tqdm
 from pointBERT.tools import builder
 from pointBERT.utils.config import cfg_from_yaml_file
 from embeddings import EncoderHead
-from test_dataset import ClayDataset, SubGoalClayDataset
+from test_dataset import ClayDatasetForwardBackward
 from os.path import join
 import os
 import numpy as np
 import torch
 
-def collate_fn(batch):
-    """
-    Custom collate function to handle variable-length sequences in the dataset.
-    """
-    # Stack the agent positions and actions
-    agent_pos = torch.stack([item['agent_pos'] for item in batch], dim=0)
-    action = torch.stack([item['action'] for item in batch], dim=0)
-    
-    # Stack the point cloud sequences
-    pcl_seq = torch.stack([item['pcl_seq'] for item in batch], dim=0)
-    
-    return {
-        'agent_pos': agent_pos,
-        'action': action,
-        'pcl_seq': pcl_seq
-    }
 
 # exp name
-exp_name = 'subgoal_new_data_16_pred_09discount' # 'subgoal_3_pcl_seq_12pred_7datasetfixed_with_augs' 
+exp_name = 'new_data_forward_backward_8_pred' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -51,18 +35,14 @@ latent_dim = 512
 projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
 
 # define the dataloader
-n_datapoints = 7200 # 2520 # 2*2*1800 # the desired numer of datapoints after augmentation
-n_raw_trajectories = 20 #7 # the number of raw datapoints
-pred_horizon = 16 # 8 # 20
-subgoal_stepsize = 4
-num_epochs = 1000 # 750
-discount_factor = 0.9 # if 1.0 then no discounting
+n_datapoints = 7200 # 2160 # 2520 # 2*2*1800 # the desired numer of datapoints after augmentation
+n_raw_trajectories = 20 # the number of raw datapoints
+pred_horizon = 8
+num_epochs = 1000 # 1500 # 750
 target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
-dataset_path = '/home/alison/Documents/June18_Human_Demos_Train' # '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery' # '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
-# test_dataset_path = "ClayDemoDataset/" + str(target_shape) + "/Test" 
+dataset_path = '/home/alison/Documents/June18_Human_Demos_Train' # '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/'
 center_actions = False
-# dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
-dataset = SubGoalClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions, subgoal_stepsize)
+dataset = ClayDatasetForwardBackward(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
 dataloader = torch.utils.data.DataLoader(
     dataset,
     batch_size=8, # 64
@@ -71,8 +51,7 @@ dataloader = torch.utils.data.DataLoader(
     # accelerate cpu-gpu transfer
     pin_memory=True,
     # don't kill worker process after each epoch
-    persistent_workers=True,
-    collate_fn=collate_fn)
+    persistent_workers=True)
 
 # save experiment parameters as a dictionary
 exp_params = {'exp_name': exp_name,
@@ -101,7 +80,7 @@ noise_scheduler = DDPMScheduler(
 # define parameters
 pcl_feature_dim = 512
 lowdim_obs_dim = 8 
-obs_dim = int((pred_horizon + subgoal_stepsize) / subgoal_stepsize)*pcl_feature_dim + lowdim_obs_dim
+obs_dim = 2*pcl_feature_dim + lowdim_obs_dim
 action_dim = 8
 obs_horizon = 1
 
@@ -143,21 +122,25 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
         # batch loop
         with tqdm(dataloader, desc='Batch', leave=False) as tepoch:
             for nbatch in tepoch:
+                # print("point cloud shape: ", nbatch['pointcloud'].shape)
+                pointcloud = nbatch['pointcloud'].to(device).float()
+                goalcloud = nbatch['goal'].to(device).float()
                 nagent_pos = nbatch['agent_pos'].to(device).unsqueeze(axis=1)
                 naction = nbatch['action'].to(device)
                 B = nagent_pos.shape[0]
 
-                obs_features = [nagent_pos]
-                for i in range(nbatch['pcl_seq'].shape[1]):
-                    pcl = nbatch['pcl_seq'][:, i, :, :].to(device).float()
-                    pcl_features = nets['pointbert_encoder'](pcl)
-                    pcl_features = nets['projection_head'](pcl_features)
+                # embed point cloud
+                pointcloud_features = nets['pointbert_encoder'](pointcloud)
+                pointcloud_features = nets['projection_head'](pointcloud_features)
 
-                    # weight the pcl features based on order
-                    pcl_features = discount_factor ** i * pcl_features
-                    pcl_features = pcl_features.unsqueeze(1).repeat(1, obs_horizon, 1)
-                    obs_features.append(pcl_features)
-                obs_features = torch.cat(obs_features, dim=-1)
+                # embed goal cloud
+                goalcloud_features = nets['pointbert_encoder'](goalcloud)
+                goalcloud_features = nets['projection_head'](goalcloud_features)
+
+                # stack pointcloud features for each obs horizon
+                pointcloud_features = pointcloud_features.unsqueeze(1).repeat(1, obs_horizon, 1)
+                goalcloud_features = goalcloud_features.unsqueeze(1).repeat(1, obs_horizon, 1)
+                obs_features = torch.cat([pointcloud_features, nagent_pos, goalcloud_features],dim=-1)
 
                 # concatenate vision feature and low-dim obs
                 obs_cond = obs_features.flatten(start_dim=1)
@@ -198,7 +181,7 @@ with tqdm(range(num_epochs), desc='Epoch') as tglobal:
             
             # save the model weights every 50 epochs
             mean_loss = np.mean(epoch_loss)
-            if mean_loss < best_loss and epoch_idx % 25 == 0:
+            if mean_loss < best_loss and epoch_idx % 10 == 0:
                 best_loss = mean_loss
                 print("\nSaving model weights with avg loss = ", mean_loss)
 

@@ -213,6 +213,234 @@ class ClayDataset(torch.utils.data.Dataset):
         nsample['action'] = action_data
         nsample['agent_pos'] = obs_pos_data
         return nsample
+
+class ClayDatasetForwardBackward(torch.utils.data.Dataset):
+    def __init__(self, dataset_dir, pred_horizon, n_datapoints, n_raw_trajectories, center_action):
+        """
+        The Dataloader for the clay sculpting dataset at the Trajectory level (compatible with ACT and Diffusion Policy). 
+
+        :param episode_idxs: list of indices of the episodes to load
+        :param dataset_dir: directory where the dataset is stored
+        :param n_datapoints: number of datapoints (i.e. desired number of final trajectories after augmentation)
+        :param n_raw_trajectories: number of raw trajectories in the dataset
+        :param center_action: whether to center the action before normalizing
+        """
+        super(ClayDataset).__init__()
+        self.dataset_dir = dataset_dir
+        self.pred_horizon = pred_horizon
+        self.n_datapoints = n_datapoints
+        self.n_raw_trajectories = n_raw_trajectories
+        self.center_action = center_action
+
+        # determine the number of datapoints per trajectory - needs to be a round number
+        self.n_datapoints_per_trajectory = self.n_datapoints / self.n_raw_trajectories
+        if not self.n_datapoints_per_trajectory.is_integer():
+            raise ValueError('The number of datapoints per trajectory needs to be a round number, please input a valid number of datapoints given the number of raw trajectories')
+
+        # deterime the augmentation interval
+        self.aug_step = 360 / self.n_datapoints_per_trajectory
+
+    def _center_pcl(self, pcl, center):
+        centered_pcl = pcl - center
+        centered_pcl = centered_pcl * 10
+        return centered_pcl
+
+    def _center_normalize_action(self, action, ctr):
+        # center the action
+        new_action = np.zeros(5)
+        new_action[0:3] = action[0:3] - ctr
+        new_action[3:5] = action[3:5]
+        # normalize centered action
+        # TODO: update the mins and maxs to be the correct range for the dataset!
+        mins = np.array([-0.15, -0.15, -0.05, -90, 0.005])
+        maxs = np.array([0.15, 0.15, 0.05, 90, 0.05])
+        norm_action = np.zeros(5)
+        norm_action[0:5] = (new_action[0:5] - mins) / (maxs - mins)
+        norm_action = norm_action * 2 - 1 # set to [-1, 1]
+        return norm_action
+
+    def _normalize_action(self, action):
+        # mins = [0.5413, -0.04232, 0.1300, -360, -15, -90, 0.0005]
+        # maxs = [0.6700, 0.08500, 0.1560, 360, 130, 90, 0.005]
+
+        # # -------- min/max values for 7 demos from \Mar24_Bowl_Demos_Soft_Finger ------
+        # a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
+        # a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
+
+
+        # # ------- min/max values for 20 concave/convex demos from \June18_Human_Demos -----
+        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
+        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
+        # Action Mins:  [ 5.34147426e-01 -5.48177446e-02  1.27324785e-01 -3.59930863e+02
+        # -1.00900854e+01 -1.79939238e+02  9.00000000e-03]
+
+        # Action Maxs:  [6.74862425e-01 8.70004414e-02 1.59956120e-01 3.59985867e+02
+        # 1.16749681e+01 1.79825982e+02 1.50000000e-02]
+
+        norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
+        norm_action = norm_action  * 2 - 1 # set to [-1, 1]
+        return norm_action
+    
+    def _rotate_pcl(self, state, center, rot):
+        '''
+        Faster implementation of rotation augmentation to fix slow down issue
+        '''
+        state = state - center
+        R = Rotation.from_euler('xyz', np.array([0, 0, rot]), degrees=True).as_matrix()
+        state = R @ state.T
+        pcl_aug = state.T + center
+        return pcl_aug
+
+    def _rotate_action(self, action, center, rot):
+        unit_circle_og_grasp = (action[0] - center[0], action[1] - center[1])
+        rot_original = math.degrees(math.atan2(unit_circle_og_grasp[1], unit_circle_og_grasp[0]))
+        unit_circle_radius = math.sqrt(unit_circle_og_grasp[0]**2 + unit_circle_og_grasp[1]**2)
+        rot_new =  rot_original + rot
+
+        new_unit_circle_grasp = (unit_circle_radius*math.cos(math.radians(rot_new)), unit_circle_radius*math.sin(math.radians(rot_new)))
+        
+        new_global_grasp = (center[0] + new_unit_circle_grasp[0], center[1] + new_unit_circle_grasp[1])
+        x = new_global_grasp[0]
+        y = new_global_grasp[1]
+        rz = action[5] + rot
+        rz_new = (rz + 90) % 180 - 90 # wrap rz
+
+        # convert to radians
+        r_x = math.radians(action[3])
+        r_y = math.radians(action[4])
+        z_rotation_change = math.radians(rot)
+
+        # calculate the new pitch and roll
+        rx_new = math.asin(math.cos(z_rotation_change)*math.sin(r_x) + math.sin(z_rotation_change)*math.cos(r_x)*math.sin(r_y))
+        ry_new = math.asin(math.cos(r_x)*math.sin(r_y))
+
+        # convert back to degrees
+        rx_new = math.degrees(rx_new)
+        ry_new = math.degrees(ry_new)
+
+        action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
+        return action_aug
+    
+    def _wrap_rz(self, original_rz):
+        wrapped_rz = (original_rz + 90) % 180 - 90
+        return wrapped_rz
+    
+    def __len__(self):
+        """
+        Return the number of episodes in the dataset (i.e. the number of actions in the trajectory folder)
+        """
+        return self.n_datapoints
+
+    def __getitem__(self, idx):
+        raw_traj_idx = int(idx // self.n_datapoints_per_trajectory) 
+        # determine the rotation augmentation to apply
+        aug_rot = (idx % self.n_datapoints_per_trajectory) * self.aug_step
+        traj_path = self.dataset_dir + '/Trajectory' + str(raw_traj_idx)
+
+        states = []
+        actions = []
+        centers = []
+        j = 0
+
+        while exists(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy'):  
+            ctr = np.load(traj_path + '/pcl_center' + str(j) + '.npy')
+            s = np.load(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy')
+            s_rot = self._rotate_pcl(s, ctr, aug_rot)
+            s_rot_scaled = self._center_pcl(s_rot, ctr)
+            states.append(s_rot_scaled)
+
+            if j != 0:
+                # load unnormalized action
+                a = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
+                # fix the r_x scaling
+                # a[3] = self._wrap_rz(a[3])
+                # NOTE: need to go through and verify the action is correct (i.e. wrapping rz is flipping rx, etc.)
+                a_rot = self._rotate_action(a, ctr, aug_rot)
+                if self.center_action:
+                    a_scaled = self._center_normalize_action(a_rot, ctr)
+                    centers.append(ctr)
+                else:
+                    a_scaled = self._normalize_action(a_rot)
+                    centers.append(ctr)
+                actions.append(a_scaled)
+            j+=1
+
+        # TODO: then will need to pad the previous action to also be the pred_horizon length
+            # NOTE: instead of zero padding, we will pad with obs pos (normalized)
+
+        episode_len = len(actions)
+        start_ts = np.random.choice(episode_len)
+        state = states[start_ts]
+        
+        # load uncentered goal
+        g = np.load(traj_path + '/unnormalized_pointcloud' + str(j-1) + '.npy') # set the goal point cloud to be the last pcl in demo trajectory
+        g_rot = self._rotate_pcl(g, centers[start_ts], aug_rot)
+        goal = self._center_pcl(g_rot, centers[start_ts])
+
+        action = actions[start_ts:]
+        action = np.stack(action, axis=0)
+
+        # add in termination token -1 continue, 1 stop
+        stop_token = -1 * np.ones((action.shape[0], 1))
+        stop_token[-1] = 1
+        action = np.concatenate((action, stop_token), axis=1)
+        
+        action_len = episode_len - start_ts
+
+        if start_ts != 0:
+            obs_pos = actions[start_ts-1]
+        else:
+            if self.center_action:
+                obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]), centers[start_ts])
+            else:
+                obs_pos = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]))
+        
+        # add padding to obs_pos of one 0 vector to make 8d
+        obs_pos = np.concatenate((obs_pos, -1 * np.ones((1))), axis=0)
+
+        if action_len < self.pred_horizon:
+            padded_action = np.zeros((self.pred_horizon, 8))
+            padded_action[:action_len] = action
+            for i in range(action_len, self.pred_horizon):
+                padded_action[i] = action[-1]
+        else:
+            padded_action = action[:self.pred_horizon]
+
+        # get previous actions
+        prev_actions = actions[0:start_ts]
+        # reverse the previous actions to get the backward trajectory
+        prev_actions = prev_actions[::-1] # this way we get most recent previous action first
+        prev_actions = np.stack(prev_actions, axis=0)
+        prev_stop_tokens = -1 * np.ones((prev_actions.shape[0], 1))
+        prev_actions = np.concatenate((prev_actions, prev_stop_tokens), axis=1)
+        prev_action_len = start_ts
+
+        if prev_action_len < self.pred_horizon:
+            padded_prev_action = np.zeros((self.pred_horizon, 8))
+            padded_prev_action[:prev_action_len] = prev_actions
+            for i in range(prev_action_len, self.pred_horizon):
+                padded_prev_action[i] = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04])) # pad with obs pos
+        else:
+            padded_prev_action = prev_actions[:self.pred_horizon]
+
+        # reverse the padded previous actions again 
+        padded_prev_action = padded_prev_action[::-1]
+
+        # combine the prev actions and actions to get continuous action sequence
+        full_padded_action = np.concatenate((padded_prev_action, padded_action), axis=0)
+
+        # construct observations
+        state_data = torch.from_numpy(state)
+        goal_data = torch.from_numpy(goal).float()
+        action_data = torch.from_numpy(full_padded_action).float()
+        obs_pos_data = torch.from_numpy(obs_pos).float()
+
+        nsample = dict()
+        nsample['pointcloud'] = state_data
+        nsample['goal'] = goal_data
+        nsample['action'] = action_data
+        nsample['agent_pos'] = obs_pos_data
+        return nsample
     
 class SubGoalClayDataset(torch.utils.data.Dataset):
     def __init__(self, dataset_dir, pred_horizon, n_datapoints, n_raw_trajectories, center_action, subgoal_stepsize):
@@ -264,11 +492,20 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
     def _normalize_action(self, action):
         # mins = [0.5413, -0.04232, 0.1300, -360, -15, -90, 0.0005]
         # maxs = [0.6700, 0.08500, 0.1560, 360, 130, 90, 0.005]
-        a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
-        a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
-        norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
-        norm_action = norm_action  * 2 - 1 # set to [-1, 1]
-        return norm_action
+
+        # # -------- min/max values for 7 demos from \Mar24_Bowl_Demos_Soft_Finger ------
+        # a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
+        # a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
+
+
+        # # ------- min/max values for 20 concave/convex demos from \June18_Human_Demos -----
+        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
+        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
+        # Action Mins:  [ 5.34147426e-01 -5.48177446e-02  1.27324785e-01 -3.59930863e+02
+        # -1.00900854e+01 -1.79939238e+02  9.00000000e-03]
+
+        # Action Maxs:  [6.74862425e-01 8.70004414e-02 1.59956120e-01 3.59985867e+02
+        # 1.16749681e+01 1.79825982e+02 1.50000000e-02]
     
     def _rotate_pcl(self, state, center, rot):
         '''
