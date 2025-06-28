@@ -14,7 +14,7 @@ import torch
 
 
 # exp name
-exp_name = 'new_data_16_pred' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
+exp_name = 'new_data_16_pred_fixed_dataloader' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):

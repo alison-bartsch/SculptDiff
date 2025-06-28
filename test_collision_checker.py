@@ -8,12 +8,12 @@ def create_grippers(action7d, ee_dist=0.05, color=[0.8, 0.8, 0.8], cylinder_radi
     cylinder_length = 0.045  # 45mm length
     cylinder1 = o3d.geometry.TriangleMesh.create_cylinder(radius=cylinder_radius, height=cylinder_length)
     cylinder1.compute_vertex_normals()
-    cylinder1.paint_uniform_color(color)  # Set color to light gray
+    cylinder1.paint_uniform_color(color)
     cylinder1.translate([-cylinder_length / 2, 0, 0])  # Center the cylinder at the origin
     cylinder1.rotate(o3d.geometry.get_rotation_matrix_from_xyz((0, 0, np.pi / 2)))  # Rotate to align with the y-axis
     cylinder2 = o3d.geometry.TriangleMesh.create_cylinder(radius=cylinder_radius, height=cylinder_length)
     cylinder2.compute_vertex_normals()
-    cylinder2.paint_uniform_color(color)  # Set color to light gray
+    cylinder1.paint_uniform_color(color)
     cylinder2.translate([-cylinder_length / 2, 0, 0])  # Center the cylinder at the origin
     cylinder2.rotate(o3d.geometry.get_rotation_matrix_from_xyz((0, 0, np.pi / 2)))  # Rotate to align with the y-axis
     # cylinder2.translate([0.04, 0, 0])  # Move the second cylinder to the right

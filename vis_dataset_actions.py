@@ -9,7 +9,7 @@ def create_gripper_rectangle(action7d):
     rectangle = np.array([[x, y, z] for x in np.linspace(-0.025, 0.025, 10) for y in np.linspace(-0.05, 0.05, 10) for z in np.linspace(-0.01, 0.01, 10)])
 
     # set the rectangle rotation
-    R = Rotation.from_euler('xyz', np.array([action7d[3], action7d[4], action7d[5]]), degrees=True).as_matrix()
+    R = Rotation.from_euler('xyz', np.array([action7d[3], action7d[4], action7d[5]+90]), degrees=True).as_matrix()
     # R = Rotation.from_euler('xyz', np.array([0, 0, action7d[5]]), degrees=True).as_matrix()
     rectangle = rectangle 
     rectangle = R @ rectangle.T
@@ -41,8 +41,8 @@ def rotate_action(action, center, rot):
     new_global_grasp = (center[0] + new_unit_circle_grasp[0], center[1] + new_unit_circle_grasp[1])
     x = new_global_grasp[0]
     y = new_global_grasp[1]
-    rz = action[5] + rot
-    rz_new = (rz + 90) % 180 - 90 # wrap rz
+    rz_new = action[5] + rot
+    # rz_new = (rz + 90) % 180 - 90 # wrap rz
 
     # convert to radians
     r_x = math.radians(action[3])
@@ -85,12 +85,19 @@ def preserve_pitch_roll(r_x, r_y, r_z, z_rotation_change):
 
     return r_x_new, r_y_new, r_z_new
 
-for i in range(6):
+for i in range(3,20):
     j = 1
     r_idx = 0
-    traj_path = '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory' + str(i) 
+    traj_path = '/home/alison/Documents/June18_Human_Demos_Train/Trajectory' + str(i)
+    # traj_path = '/home/alison/Documents/Feb26_Human_Demos_Raw/pottery/Trajectory' + str(i) 
     # traj_path = '/home/alison/Documents/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory' + str(i)
     # traj_path = '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery/Trajectory' + str(i)
+
+
+    # initialize rectangle labels
+    elem = np.array([[x, y, z] for x in np.linspace(-0.025, 0.025, 10) for y in np.linspace(-0.05, 0.05, 10) for z in np.linspace(-0.01, 0.01, 10)])
+    # all the points with positive y values assign label 1, negative y values assign label 0
+    labels = np.where(elem[:, 1] > 0, 1, 0)
 
     while os.path.exists(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy'):  
         print("Traj: ", i, "action: ", j-1)
@@ -119,34 +126,54 @@ for i in range(6):
         arrow.rotate(Rotation.from_euler('xyz', np.array([0, 90, 0]), degrees=True).as_matrix(), center=(0, 0, 0))
         arrow.translate((ctr[0], ctr[1], ctr[2]))
 
+        # create a green arrow along the y axis
+        arrow_y = o3d.geometry.TriangleMesh.create_arrow(cylinder_radius=0.005, cone_radius=0.01, cylinder_height=0.05, cone_height=0.02)
+        arrow_y.paint_uniform_color([0, 1, 0]) # green
+        arrow_y.rotate(Rotation.from_euler('xyz', np.array([90, 0, 0]), degrees=True).as_matrix(), center=(0, 0, 0))
+        arrow_y.translate((ctr[0], ctr[1], ctr[2]))
+
         # visualize the action
         rectangle = create_gripper_rectangle(action7d)
+        # create two o3d arrays one with the rectangle points and one with the labels and the other with zero labels, make them red and green respectively
         rectangle_o3d = o3d.geometry.PointCloud()
         rectangle_o3d.points = o3d.utility.Vector3dVector(rectangle)
-        rectangle_o3d.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,1,0]), (len(rectangle),1)))
-        o3d.visualization.draw_geometries([rectangle_o3d, pcl_o3d, arrow])
+        rectangle_o3d.colors = o3d.utility.Vector3dVector(np.where(labels[:, None], np.array([0, 1, 0]), np.array([1, 0, 0])))
+        o3d.visualization.draw_geometries([rectangle_o3d, pcl_o3d, arrow, arrow_y])
+
+        for k in range(0,360,30):
+            rotated_action = rotate_action(action7d, ctr, k)
+            rotated_pcl = rotate_pcl(pcl_arr, ctr, k)
+
+            rotated_rectangle = create_gripper_rectangle(rotated_action)
+            rotated_rectangle_o3d = o3d.geometry.PointCloud()
+            rotated_rectangle_o3d.points = o3d.utility.Vector3dVector(rotated_rectangle)
+            rotated_rectangle_o3d.colors = o3d.utility.Vector3dVector(np.where(labels[:, None], np.array([0, 1, 0]), np.array([1, 0, 0])))
+            rotated_pcl_o3d = o3d.geometry.PointCloud()
+            rotated_pcl_o3d.points = o3d.utility.Vector3dVector(rotated_pcl)
+            rotated_pcl_o3d.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(rotated_pcl),1)))
+            o3d.visualization.draw_geometries([rotated_rectangle_o3d, rotated_pcl_o3d, arrow, arrow_y])
 
         # if r_idx > 0:
         #     np.save(traj_path + '/action7d_unnormalized' + str(j-1-r_idx) + '.npy', action7d)
         #     np.save(traj_path + '/unnormalized_pointcloud' + str(j-1-r_idx) + '.npy', pcl_arr)
         #     np.save(traj_path + '/pcl_center' + str(j-1-r_idx) + '.npy', ctr)
 
-        # if yes, flip the rx to be negative
-        user_response = input("Is the action flipped? (y/n) Is the action bad? (r): ")
-        if user_response.lower() == 'y':
-            action7d[3] = -action7d[3]
-            np.save(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy', action7d)
-            print("Updated action7d_unnormalized" + str(j-1) + ".npy")
+        # # if yes, flip the rx to be negative
+        # user_response = input("Is the action flipped? (y/n) Is the action bad? (r): ")
+        # if user_response.lower() == 'y':
+        #     action7d[3] = -action7d[3]
+        #     np.save(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy', action7d)
+        #     print("Updated action7d_unnormalized" + str(j-1) + ".npy")
 
-            # load unnormalized action
-            action7d = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
+        #     # load unnormalized action
+        #     action7d = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
 
-            # visualize the action
-            rectangle = create_gripper_rectangle(action7d)
-            rectangle_o3d = o3d.geometry.PointCloud()
-            rectangle_o3d.points = o3d.utility.Vector3dVector(rectangle)
-            rectangle_o3d.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,1,0]), (len(rectangle),1)))
-            o3d.visualization.draw_geometries([rectangle_o3d, pcl_o3d, arrow])
+        #     # visualize the action
+        #     rectangle = create_gripper_rectangle(action7d)
+        #     rectangle_o3d = o3d.geometry.PointCloud()
+        #     rectangle_o3d.points = o3d.utility.Vector3dVector(rectangle)
+        #     rectangle_o3d.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,1,0]), (len(rectangle),1)))
+        #     o3d.visualization.draw_geometries([rectangle_o3d, pcl_o3d, arrow])
 
         # TODO: have r trigger a remove an action (increment the removal idx theshold)
         # elif user_response.lower() == 'r':
