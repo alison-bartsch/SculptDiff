@@ -145,9 +145,11 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
         # a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
         # a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
 
-        # ------- min/max values for 20 concave/convex demos from \June18_Human_Demos -----
-        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
-        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
+        # # ------- min/max values for 20 concave/convex demos from \June18_Human_Demos -----
+        # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
+        # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
+        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
+        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
 
     # define initial joint rotation
     joints = fa.get_joints()
