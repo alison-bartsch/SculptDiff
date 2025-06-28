@@ -182,10 +182,10 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     raw_goal = np.load(goal_path)
 
     # define observation pose
-    pose = fa.get_pose()
-    observation_pose = np.array([0.625, 0, 0.325]) # np.array([0.6, 0, 0.325])
-    pose.translation = observation_pose
-    fa.goto_pose(pose)
+    observation_pose = fa.get_pose()
+    observation_translation = np.array([0.625, 0, 0.325]) # np.array([0.6, 0, 0.325])
+    observation_pose.translation = observation_translation
+    fa.goto_pose(observation_pose)
     
     # initialize the n_actions counter
     n_action = 0
@@ -449,7 +449,7 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pottery_long_witheld_traj6_16pred_7datasetfixed_with_augs'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/new_data_16_pred_fixed_dataloader'
     goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
