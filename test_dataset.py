@@ -319,13 +319,12 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
 
 
         # # ------- min/max values for 20 concave/convex demos from \June18_Human_Demos -----
-        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
-        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
-        # Action Mins:  [ 5.34147426e-01 -5.48177446e-02  1.27324785e-01 -3.59930863e+02
-        # -1.00900854e+01 -1.79939238e+02  9.00000000e-03]
+        # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
+        # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
 
-        # Action Maxs:  [6.74862425e-01 8.70004414e-02 1.59956120e-01 3.59985867e+02
-        # 1.16749681e+01 1.79825982e+02 1.50000000e-02]
+        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
+        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
+        
 
         norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
         norm_action = norm_action  * 2 - 1 # set to [-1, 1]
@@ -341,39 +340,86 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         pcl_aug = state.T + center
         return pcl_aug
 
-    def _rotate_action(self, action, center, rot):
-        unit_circle_og_grasp = (action[0] - center[0], action[1] - center[1])
-        rot_original = math.degrees(math.atan2(unit_circle_og_grasp[1], unit_circle_og_grasp[0]))
-        unit_circle_radius = math.sqrt(unit_circle_og_grasp[0]**2 + unit_circle_og_grasp[1]**2)
-        rot_new =  rot_original + rot
+    # def _rotate_action(self, action, center, rot):
+    #     unit_circle_og_grasp = (action[0] - center[0], action[1] - center[1])
+    #     rot_original = math.degrees(math.atan2(unit_circle_og_grasp[1], unit_circle_og_grasp[0]))
+    #     unit_circle_radius = math.sqrt(unit_circle_og_grasp[0]**2 + unit_circle_og_grasp[1]**2)
+    #     rot_new =  rot_original + rot
 
-        new_unit_circle_grasp = (unit_circle_radius*math.cos(math.radians(rot_new)), unit_circle_radius*math.sin(math.radians(rot_new)))
+    #     new_unit_circle_grasp = (unit_circle_radius*math.cos(math.radians(rot_new)), unit_circle_radius*math.sin(math.radians(rot_new)))
         
-        new_global_grasp = (center[0] + new_unit_circle_grasp[0], center[1] + new_unit_circle_grasp[1])
-        x = new_global_grasp[0]
-        y = new_global_grasp[1]
-        rz = action[5] + rot
-        rz_new = (rz + 90) % 180 - 90 # wrap rz
+    #     new_global_grasp = (center[0] + new_unit_circle_grasp[0], center[1] + new_unit_circle_grasp[1])
+    #     x = new_global_grasp[0]
+    #     y = new_global_grasp[1]
+    #     rz = action[5] + rot
+    #     rz_new = (rz + 90) % 180 - 90 # wrap rz
 
-        # convert to radians
-        r_x = math.radians(action[3])
-        r_y = math.radians(action[4])
-        z_rotation_change = math.radians(rot)
+    #     # convert to radians
+    #     r_x = math.radians(action[3])
+    #     r_y = math.radians(action[4])
+    #     z_rotation_change = math.radians(rot)
 
-        # calculate the new pitch and roll
-        rx_new = math.asin(math.cos(z_rotation_change)*math.sin(r_x) + math.sin(z_rotation_change)*math.cos(r_x)*math.sin(r_y))
-        ry_new = math.asin(math.cos(r_x)*math.sin(r_y))
+    #     # calculate the new pitch and roll
+    #     rx_new = math.asin(math.cos(z_rotation_change)*math.sin(r_x) + math.sin(z_rotation_change)*math.cos(r_x)*math.sin(r_y))
+    #     ry_new = math.asin(math.cos(r_x)*math.sin(r_y))
 
-        # convert back to degrees
-        rx_new = math.degrees(rx_new)
-        ry_new = math.degrees(ry_new)
+    #     # convert back to degrees
+    #     rx_new = math.degrees(rx_new)
+    #     ry_new = math.degrees(ry_new)
 
-        action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
-        return action_aug
+    #     action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
+    #     return action_aug
+    
+    def _rotate_action(self, action, center, rot):
+        pose_6d = action[:6]
+        position = pose_6d[:3]
+        orientation = pose_6d[3:]
+
+        cx, cy, cz = center
+        px, py, pz = position
+
+        # Step 1: Translate point to origin (centered at cx, cy)
+        dx = px - cx
+        dy = py - cy
+
+        # Step 2: Rotate in XY plane
+        cos_theta = np.cos(math.radians(rot))
+        sin_theta = np.sin(math.radians(rot))
+
+        rotated_x = cos_theta * dx - sin_theta * dy + cx
+        rotated_y = sin_theta * dx + cos_theta * dy + cy
+        rotated_z = pz  # unchanged
+
+        new_position = np.array([rotated_x, rotated_y, rotated_z])
+
+        # Step 3: Update orientation
+        # Apply additional rotation about the Z-axis (pre-multiplied)
+        original_rot = Rotation.from_euler('xyz', orientation, degrees=True)
+        z_rotation = Rotation.from_euler('z', rot, degrees=True)
+        new_rot =  original_rot * z_rotation
+        new_orientation = new_rot.as_euler('xyz', degrees=True)
+
+        return np.concatenate([new_position, new_orientation, action[6:]])
     
     def _wrap_rz(self, original_rz):
         wrapped_rz = (original_rz + 90) % 180 - 90
         return wrapped_rz
+
+    def _fix_action_rotations(self, action7d):
+        if action7d[5] < -90:
+            if action7d[3] < 0:
+                action7d[4] = -action7d[4]
+            else:
+                action7d[3] = -action7d[3]
+                action7d[4] = -action7d[4]
+
+        if action7d[5] > 90:
+            action7d[4] = -action7d[4]
+
+        if np.abs(action7d[5]) < 90:
+            action7d[4] = -action7d[4]
+
+        return action7d
     
     def __len__(self):
         """
@@ -405,7 +451,11 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
                 # fix the r_x scaling
                 # a[3] = self._wrap_rz(a[3])
                 # NOTE: need to go through and verify the action is correct (i.e. wrapping rz is flipping rx, etc.)
+                # a_rot = self._rotate_action(a, ctr, aug_rot)
+
+                a = self._fix_action_rotations(a)
                 a_rot = self._rotate_action(a, ctr, aug_rot)
+                a_rot = self._fix_action_rotations(a_rot)
                 if self.center_action:
                     a_scaled = self._center_normalize_action(a_rot, ctr)
                     centers.append(ctr)
@@ -549,13 +599,12 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
 
 
         # # ------- min/max values for 20 concave/convex demos from \June18_Human_Demos -----
-        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
-        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
-        # Action Mins:  [ 5.34147426e-01 -5.48177446e-02  1.27324785e-01 -3.59930863e+02
-        # -1.00900854e+01 -1.79939238e+02  9.00000000e-03]
+        # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
+        # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
 
-        # Action Maxs:  [6.74862425e-01 8.70004414e-02 1.59956120e-01 3.59985867e+02
-        # 1.16749681e+01 1.79825982e+02 1.50000000e-02]
+        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
+        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
+
         norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
         norm_action = norm_action  * 2 - 1 # set to [-1, 1]
         return norm_action
