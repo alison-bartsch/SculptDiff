@@ -860,6 +860,7 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
 
             padded_states = np.zeros((states_seq_size, 2048, 3))
             padded_states[:len(state_list)] = np.stack(state_list, axis=0)
+            padded_states[len(state_list):] = np.tile(state_list[-1], (len(padded_states[len(state_list):]), 1, 1))
         else:
             padded_action = action[:self.pred_horizon]
             padded_states = np.stack(state_list, axis=0)
