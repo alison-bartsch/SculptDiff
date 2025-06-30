@@ -1,6 +1,7 @@
 import os
 import cv2
 import time
+import math
 import torch
 import queue
 import threading
@@ -43,18 +44,26 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
 
     :param fa:  franka robot class instantiation
     """
+    # NOTE: this function cannot distinguish directional rotation goals for the wrist (i.e. rz)
+    # first go to rz in the wrist joints
+    local_joints = fa.get_joints()
+    local_joints[6] = math.radians(45-rz)
+    fa.goto_joints(local_joints, duration=9)
+    final_joints = fa.get_joints()
+    print("Executed to joint angle: ", math.degrees(final_joints[6]))
+
     pose = fa.get_pose()
     starting_rot = pose.rotation
     orig = Rotation.from_matrix(starting_rot)
     orig_euler = orig.as_euler('xyz', degrees=True)
-    rot_vec = np.array([rx, ry, rz])
+    rot_vec = np.array([rx, ry, 0])
     new_euler = orig_euler + rot_vec
     r = Rotation.from_euler('xyz', new_euler, degrees=True)
     pose.rotation = r.as_matrix()
     pose.translation = np.array([x, y, z])
 
     intermediate_pose = calculate_intermediate_pose(pose.copy())
-    fa.goto_pose(intermediate_pose)
+    fa.goto_pose(intermediate_pose, duration=6)
 
     fa.goto_pose(pose)
     fa.goto_gripper(d, force=60.0)
@@ -148,8 +157,10 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
         # # ------- min/max values for 20 concave/convex demos from \June18_Human_Demos -----
         # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
         # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
-        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
-        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
+        # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
+        # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
+        a_mins7d = np.array([0.2188, -0.1150, 0.1272, -360, -50, -120, 0.008])
+        a_maxs7d = np.array([0.7376, 0.1007, 0.1600, 360, 50, 240, 0.016])
 
     # define initial joint rotation
     joints = fa.get_joints()
@@ -449,7 +460,7 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/new_data_16_pred_fixed_dataloader'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/new_data_16_pred_final_correct_augs'
     goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
