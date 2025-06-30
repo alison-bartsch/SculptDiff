@@ -29,6 +29,8 @@ class ClayDataset(torch.utils.data.Dataset):
         self.n_datapoints = n_datapoints
         self.n_raw_trajectories = n_raw_trajectories
         self.center_action = center_action
+        self.ee_center = np.array([0.608, 0.014, 0.125])
+        self.pcl_center = np.array([0.630, -0.0054, 0.074])
 
         # determine the number of datapoints per trajectory - needs to be a round number
         self.n_datapoints_per_trajectory = self.n_datapoints / self.n_raw_trajectories
@@ -65,23 +67,22 @@ class ClayDataset(torch.utils.data.Dataset):
         # a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
         # a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
 
-
         # # ------- min/max values for 20 concave/convex demos from \June18_Human_Demos -----
         # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
         # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
         
-
         # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
         # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
-
 
         # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -119, 0.008])
         # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 240, 0.016])
 
+        # a_mins7d = np.array([0.2188, -0.1150, 0.1272, -360, -50, -120, 0.008])
+        # a_maxs7d = np.array([0.7376, 0.1007, 0.1600, 360, 50, 240, 0.016])
 
 
-        a_mins7d = np.array([0.2188, -0.1150, 0.1272, -360, -50, -120, 0.008])
-        a_maxs7d = np.array([0.7376, 0.1007, 0.1600, 360, 50, 240, 0.016])
+        a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
+        a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
 
         norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
         norm_action = norm_action  * 2 - 1 # set to [-1, 1]
@@ -92,7 +93,7 @@ class ClayDataset(torch.utils.data.Dataset):
         Faster implementation of rotation augmentation to fix slow down issue
         '''
         state = state - center
-        R = Rotation.from_euler('xyz', np.array([0, 0, rot]), degrees=True).as_matrix()
+        R = Rotation.from_euler('xyz', np.array([0, 0, -rot]), degrees=True).as_matrix()
         state = R @ state.T
         pcl_aug = state.T + center
         return pcl_aug
@@ -179,27 +180,10 @@ class ClayDataset(torch.utils.data.Dataset):
     #     return action7d
 
     def _fix_real_action(self, action7d):
-        # if action7d[5] < -120:
-        #     action7d[5] = 180 + 180 - np.abs(action7d[5])
-        #     action7d[4] = -action7d[4]
-        #     return action7d
-        # else:
-        #     return action7d
-
         if action7d[5] < -120:
             action7d[5] = 180 + 180 - np.abs(action7d[5])
-            action7d[4] = -action7d[4]
-            action7d[3] = -action7d[3] # flip the x rotation
             return action7d
 
-        elif action7d[5] < -90:
-            action7d[3] = -action7d[3] # flip the x rotation
-            return action7d
-
-        elif action7d[5] > 90:
-            action7d[3] = -action7d[3] # flip the x rotation
-            return action7d
-        
         else:
             return action7d
 
@@ -214,10 +198,16 @@ class ClayDataset(torch.utils.data.Dataset):
         x = pts[0, 0]
         y = pts[0, 1]
 
-        R_obj_in_world = Rotation.from_euler('zxy', [action[5], action[3], action[4]], degrees=True)
+        # R_obj_in_world = Rotation.from_euler('zxy', [action[5], action[3], action[4]], degrees=True)
+        # R_newframe_in_world = Rotation.from_euler('z', rot, degrees=True)
+        # R_obj_in_newframe = R_newframe_in_world.inv() * R_obj_in_world
+        # rz_new, rx_new, ry_new = R_obj_in_newframe.as_euler('zxy', degrees=True)
+
+        # testing xyz convention
+        R_obj_in_world = Rotation.from_euler('xyz', [action[3], action[4], action[5]], degrees=True)
         R_newframe_in_world = Rotation.from_euler('z', rot, degrees=True)
         R_obj_in_newframe = R_newframe_in_world.inv() * R_obj_in_world
-        rz_new, rx_new, ry_new = R_obj_in_newframe.as_euler('zxy', degrees=True)
+        rx_new, ry_new, rz_new = R_obj_in_newframe.as_euler('xyz', degrees=True)
 
         action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
 
@@ -251,14 +241,14 @@ class ClayDataset(torch.utils.data.Dataset):
 
         states = []
         actions = []
-        centers = []
+        # centers = []
         j = 0
 
         while exists(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy'):  
-            ctr = np.load(traj_path + '/pcl_center' + str(j) + '.npy')
+            # ctr = np.load(traj_path + '/pcl_center' + str(j) + '.npy')
             s = np.load(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy')
-            s_rot = self._rotate_pcl(s, ctr, aug_rot)
-            s_rot_scaled = self._center_pcl(s_rot, ctr)
+            s_rot = self._rotate_pcl(s, self.pcl_center, aug_rot)
+            s_rot_scaled = self._center_pcl(s_rot, self.pcl_center)
             states.append(s_rot_scaled)
 
             if j != 0:
@@ -270,13 +260,15 @@ class ClayDataset(torch.utils.data.Dataset):
                 # a_rot = self._rotate_action(a, ctr, aug_rot)
 
                 a = self._fix_real_action(a)
-                a_rot = self._rotate_action(a, ctr, aug_rot)
+                a_rot = self._rotate_action(a, self.ee_center, aug_rot)
+
+                a_rot = a # for now, do not rotate the action, just normalize it
                 if self.center_action:
-                    a_scaled = self._center_normalize_action(a_rot, ctr)
-                    centers.append(ctr)
+                    a_scaled = self._center_normalize_action(a_rot, self.ee_center)
+                    # centers.append(ctr)
                 else:
                     a_scaled = self._normalize_action(a_rot)
-                    centers.append(ctr)
+                    # centers.append(ctr)
                 actions.append(a_scaled)
             j+=1
 
@@ -286,8 +278,10 @@ class ClayDataset(torch.utils.data.Dataset):
         
         # load uncentered goal
         g = np.load(traj_path + '/unnormalized_pointcloud' + str(j-1) + '.npy') # set the goal point cloud to be the last pcl in demo trajectory
-        g_rot = self._rotate_pcl(g, centers[start_ts], aug_rot)
-        goal = self._center_pcl(g_rot, centers[start_ts])
+        # g_rot = self._rotate_pcl(g, centers[start_ts], aug_rot)
+        # goal = self._center_pcl(g_rot, centers[start_ts])
+        g_rot = self._rotate_pcl(g, self.pcl_center, aug_rot)
+        goal = self._center_pcl(g_rot, self.pcl_center)
 
         action = actions[start_ts:]
         action = np.stack(action, axis=0)
@@ -303,7 +297,7 @@ class ClayDataset(torch.utils.data.Dataset):
             obs_pos = actions[start_ts-1]
         else:
             if self.center_action:
-                obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]), centers[start_ts])
+                obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]), self.ee_center)
             else:
                 obs_pos = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]))
         
@@ -348,6 +342,8 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         self.n_datapoints = n_datapoints
         self.n_raw_trajectories = n_raw_trajectories
         self.center_action = center_action
+        self.ee_center = np.array([0.608, 0.014, 0.125])
+        self.pcl_center = np.array([0.630, -0.0054, 0.074])
 
         # determine the number of datapoints per trajectory - needs to be a round number
         self.n_datapoints_per_trajectory = self.n_datapoints / self.n_raw_trajectories
@@ -389,8 +385,12 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
         # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
 
-        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
-        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
+        # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
+        # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
+
+
+        a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
+        a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
         
 
         norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
@@ -402,52 +402,51 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         Faster implementation of rotation augmentation to fix slow down issue
         '''
         state = state - center
-        R = Rotation.from_euler('xyz', np.array([0, 0, rot]), degrees=True).as_matrix()
+        R = Rotation.from_euler('xyz', np.array([0, 0, -rot]), degrees=True).as_matrix()
         state = R @ state.T
         pcl_aug = state.T + center
         return pcl_aug
 
     def _rotate_action(self, action, center, rot):
-        unit_circle_og_grasp = (action[0] - center[0], action[1] - center[1])
-        rot_original = math.degrees(math.atan2(unit_circle_og_grasp[1], unit_circle_og_grasp[0]))
-        unit_circle_radius = math.sqrt(unit_circle_og_grasp[0]**2 + unit_circle_og_grasp[1]**2)
-        rot_new =  rot_original + rot
+        # given the center and rot about z in degrees, create the transform to for the points action[0:2]
+        pts = np.array([[action[0], action[1], action[2]]])
+        # rotate pts about center by rot degrees
+        pts = pts - center
+        R = Rotation.from_euler('z', np.radians(-rot), degrees=False).as_matrix()
+        pts = R @ pts.T
+        pts = pts.T + center
+        x = pts[0, 0]
+        y = pts[0, 1]
 
-        new_unit_circle_grasp = (unit_circle_radius*math.cos(math.radians(rot_new)), unit_circle_radius*math.sin(math.radians(rot_new)))
-        
-        new_global_grasp = (center[0] + new_unit_circle_grasp[0], center[1] + new_unit_circle_grasp[1])
-        x = new_global_grasp[0]
-        y = new_global_grasp[1]
+        # R_obj_in_world = Rotation.from_euler('zxy', [action[5], action[3], action[4]], degrees=True)
+        # R_newframe_in_world = Rotation.from_euler('z', rot, degrees=True)
+        # R_obj_in_newframe = R_newframe_in_world.inv() * R_obj_in_world
+        # rz_new, rx_new, ry_new = R_obj_in_newframe.as_euler('zxy', degrees=True)
 
-
-        # rz_new = action[5] + rot
-
-        # # convert to radians
-        # r_x = math.radians(action[3])
-        # r_y = math.radians(action[4])
-        # z_rotation_change = math.radians(rot)
-
-        # # # calculate the new pitch and roll
-        # # rx_new = math.asin(math.cos(z_rotation_change)*math.sin(r_x) + math.sin(z_rotation_change)*math.cos(r_x)*math.sin(r_y))
-        # # ry_new = math.asin(math.cos(r_x)*math.sin(r_y))
-
-        # c = np.cos(-z_rotation_change)
-        # s = np.sin(-z_rotation_change)
-
-        # rx_new, ry_new = np.dot([[c, -s], [s, c]], [r_x, r_y])
-
-        # # convert back to degrees
-        # rx_new = math.degrees(rx_new)
-        # ry_new = math.degrees(ry_new)
-
-        rot_pitch_roll = Rotation.from_euler('xyz', [action[3], action[4], 0], degrees=True)
-        rot_correction = Rotation.from_euler('z', -rot, degrees=True)
-        rot_new = rot_correction * rot_pitch_roll
-        rx_new, ry_new, _ = rot_new.as_euler('xyz', degrees=True)
-        rz_new = action[5] + rot
+        # testing xyz convention
+        R_obj_in_world = Rotation.from_euler('xyz', [action[3], action[4], action[5]], degrees=True)
+        R_newframe_in_world = Rotation.from_euler('z', rot, degrees=True)
+        R_obj_in_newframe = R_newframe_in_world.inv() * R_obj_in_world
+        rx_new, ry_new, rz_new = R_obj_in_newframe.as_euler('xyz', degrees=True)
 
         action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
+
+        # first check rz to wrap within expected range
+        if action_aug[5] > 225:
+            action_aug[5] = -(360 - action_aug[5])
+        # check if in the unexecutable zone
+        if action_aug[5] < -120 and action_aug[5] >= -135:
+            action_aug[5] = -119
+        # check if need to wrap angles for unexecutable zone
+        elif action_aug[5] < -120:
+            action_aug[5] = 180 + 180 - np.abs(action_aug[5])
+            # action_aug[4] = -action_aug[4]
+        # check if need to wrap angles for unexecutable zone
+        elif action_aug[5] > 210:
+            action_aug[5] = 209
+            
         return action_aug
+    
     
     # def _rotate_action(self, action, center, rot):
     #     pose_6d = action[:6]
@@ -484,21 +483,13 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         wrapped_rz = (original_rz + 90) % 180 - 90
         return wrapped_rz
 
-    def _fix_action_rotations(self, action7d):
-        if action7d[5] < -90:
-            if action7d[3] < 0:
-                action7d[4] = -action7d[4]
-            else:
-                action7d[3] = -action7d[3]
-                action7d[4] = -action7d[4]
+    def _fix_real_action(self, action7d):
+        if action7d[5] < -120:
+            action7d[5] = 180 + 180 - np.abs(action7d[5])
+            return action7d
 
-        if action7d[5] > 90:
-            action7d[4] = -action7d[4]
-
-        if np.abs(action7d[5]) < 90:
-            action7d[4] = -action7d[4]
-
-        return action7d
+        else:
+            return action7d
     
     def __len__(self):
         """
@@ -514,14 +505,14 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
 
         states = []
         actions = []
-        centers = []
+        # centers = []
         j = 0
 
         while exists(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy'):  
-            ctr = np.load(traj_path + '/pcl_center' + str(j) + '.npy')
+            # ctr = np.load(traj_path + '/pcl_center' + str(j) + '.npy')
             s = np.load(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy')
-            s_rot = self._rotate_pcl(s, ctr, aug_rot)
-            s_rot_scaled = self._center_pcl(s_rot, ctr)
+            s_rot = self._rotate_pcl(s, self.pcl_center, aug_rot)
+            s_rot_scaled = self._center_pcl(s_rot, self.pcl_center)
             states.append(s_rot_scaled)
 
             if j != 0:
@@ -532,15 +523,14 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
                 # NOTE: need to go through and verify the action is correct (i.e. wrapping rz is flipping rx, etc.)
                 # a_rot = self._rotate_action(a, ctr, aug_rot)
 
-                a = self._fix_action_rotations(a)
-                a_rot = self._rotate_action(a, ctr, aug_rot)
-                a_rot = self._fix_action_rotations(a_rot)
+                a = self._fix_real_action(a)
+                a_rot = self._rotate_action(a, self.ee_center, aug_rot)
                 if self.center_action:
-                    a_scaled = self._center_normalize_action(a_rot, ctr)
-                    centers.append(ctr)
+                    a_scaled = self._center_normalize_action(a_rot, self.ee_center)
+                    # centers.append(ctr)
                 else:
                     a_scaled = self._normalize_action(a_rot)
-                    centers.append(ctr)
+                    # centers.append(ctr)
                 actions.append(a_scaled)
             j+=1
 
@@ -553,8 +543,8 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         
         # load uncentered goal
         g = np.load(traj_path + '/unnormalized_pointcloud' + str(j-1) + '.npy') # set the goal point cloud to be the last pcl in demo trajectory
-        g_rot = self._rotate_pcl(g, centers[start_ts], aug_rot)
-        goal = self._center_pcl(g_rot, centers[start_ts])
+        g_rot = self._rotate_pcl(g, self.pcl_center, aug_rot)
+        goal = self._center_pcl(g_rot, self.pcl_center)
 
         action = actions[start_ts:]
         action = np.stack(action, axis=0)
@@ -570,7 +560,7 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
             obs_pos = actions[start_ts-1]
         else:
             if self.center_action:
-                obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]), centers[start_ts])
+                obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]), self.ee_center)
             else:
                 obs_pos = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]))
         
@@ -639,7 +629,9 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
         self.n_raw_trajectories = n_raw_trajectories
         self.center_action = center_action
         self.subgoal_stepsize = subgoal_stepsize
-        self.center = np.array([0.628, 0.000, 0.104])
+        # self.center = np.array([0.628, 0.000, 0.104])
+        self.ee_center = np.array([0.608, 0.014, 0.125])
+        self.pcl_center = np.array([0.630, -0.0054, 0.074])
 
         # determine the number of datapoints per trajectory - needs to be a round number
         self.n_datapoints_per_trajectory = self.n_datapoints / self.n_raw_trajectories
@@ -681,8 +673,13 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
         # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -10.10, -180, 0.008])
         # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
 
-        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
-        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
+        # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
+        # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
+
+
+
+        a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
+        a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
 
         norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
         norm_action = norm_action  * 2 - 1 # set to [-1, 1]
@@ -693,7 +690,7 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
         Faster implementation of rotation augmentation to fix slow down issue
         '''
         state = state - center
-        R = Rotation.from_euler('xyz', np.array([0, 0, rot]), degrees=True).as_matrix()
+        R = Rotation.from_euler('xyz', np.array([0, 0, -rot]), degrees=True).as_matrix()
         state = R @ state.T
         pcl_aug = state.T + center
         return pcl_aug
@@ -729,55 +726,57 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
     #     return action_aug
 
     def _rotate_action(self, action, center, rot):
-        pose_6d = action[:6]
-        position = pose_6d[:3]
-        orientation = pose_6d[3:]
+        # given the center and rot about z in degrees, create the transform to for the points action[0:2]
+        pts = np.array([[action[0], action[1], action[2]]])
+        # rotate pts about center by rot degrees
+        pts = pts - center
+        R = Rotation.from_euler('z', np.radians(-rot), degrees=False).as_matrix()
+        pts = R @ pts.T
+        pts = pts.T + center
+        x = pts[0, 0]
+        y = pts[0, 1]
 
-        cx, cy, cz = center
-        px, py, pz = position
+        # R_obj_in_world = Rotation.from_euler('zxy', [action[5], action[3], action[4]], degrees=True)
+        # R_newframe_in_world = Rotation.from_euler('z', rot, degrees=True)
+        # R_obj_in_newframe = R_newframe_in_world.inv() * R_obj_in_world
+        # rz_new, rx_new, ry_new = R_obj_in_newframe.as_euler('zxy', degrees=True)
 
-        # Step 1: Translate point to origin (centered at cx, cy)
-        dx = px - cx
-        dy = py - cy
+        # testing xyz convention
+        R_obj_in_world = Rotation.from_euler('xyz', [action[3], action[4], action[5]], degrees=True)
+        R_newframe_in_world = Rotation.from_euler('z', rot, degrees=True)
+        R_obj_in_newframe = R_newframe_in_world.inv() * R_obj_in_world
+        rx_new, ry_new, rz_new = R_obj_in_newframe.as_euler('xyz', degrees=True)
 
-        # Step 2: Rotate in XY plane
-        cos_theta = np.cos(math.radians(rot))
-        sin_theta = np.sin(math.radians(rot))
+        action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
 
-        rotated_x = cos_theta * dx - sin_theta * dy + cx
-        rotated_y = sin_theta * dx + cos_theta * dy + cy
-        rotated_z = pz  # unchanged
-
-        new_position = np.array([rotated_x, rotated_y, rotated_z])
-
-        # Step 3: Update orientation
-        # Apply additional rotation about the Z-axis (pre-multiplied)
-        original_rot = Rotation.from_euler('xyz', orientation, degrees=True)
-        z_rotation = Rotation.from_euler('z', rot, degrees=True)
-        new_rot =  original_rot * z_rotation
-        new_orientation = new_rot.as_euler('xyz', degrees=True)
-
-        return np.concatenate([new_position, new_orientation, action[6:]])
+        # first check rz to wrap within expected range
+        if action_aug[5] > 225:
+            action_aug[5] = -(360 - action_aug[5])
+        # check if in the unexecutable zone
+        if action_aug[5] < -120 and action_aug[5] >= -135:
+            action_aug[5] = -119
+        # check if need to wrap angles for unexecutable zone
+        elif action_aug[5] < -120:
+            action_aug[5] = 180 + 180 - np.abs(action_aug[5])
+            # action_aug[4] = -action_aug[4]
+        # check if need to wrap angles for unexecutable zone
+        elif action_aug[5] > 210:
+            action_aug[5] = 209
+            
+        return action_aug
+    
     
     def _wrap_rz(self, original_rz):
         wrapped_rz = (original_rz + 90) % 180 - 90
         return wrapped_rz
 
-    def _fix_action_rotations(self, action7d):
-        if action7d[5] < -90:
-            if action7d[3] < 0:
-                action7d[4] = -action7d[4]
-            else:
-                action7d[3] = -action7d[3]
-                action7d[4] = -action7d[4]
+    def _fix_real_action(self, action7d):
+        if action7d[5] < -120:
+            action7d[5] = 180 + 180 - np.abs(action7d[5])
+            return action7d
 
-        if action7d[5] > 90:
-            action7d[4] = -action7d[4]
-
-        if np.abs(action7d[5]) < 90:
-            action7d[4] = -action7d[4]
-
-        return action7d
+        else:
+            return action7d
     
     def __len__(self):
         """
@@ -795,28 +794,27 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
 
         states = []
         actions = []
-        centers = []
+        # centers = []
         j = 0
 
         while exists(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy'):  
             # print("exists")
             s = np.load(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy')
-            s_rot = self._rotate_pcl(s, self.center, aug_rot)
-            s_rot_scaled = self._center_pcl(s_rot, self.center)
+            s_rot = self._rotate_pcl(s, self.pcl_center, aug_rot)
+            s_rot_scaled = self._center_pcl(s_rot, self.pcl_center)
             states.append(s_rot_scaled)
 
             if j != 0:
                 # load unnormalized action
                 a = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
-                a = self._fix_action_rotations(a)
-                a_rot = self._rotate_action(a, self.center, aug_rot)
-                a_rot = self._fix_action_rotations(a_rot)
+                a = self._fix_real_action(a)
+                a_rot = self._rotate_action(a, self.ee_center, aug_rot)
                 if self.center_action:
-                    a_scaled = self._center_normalize_action(a_rot, self.center)
-                    centers.append(self.center)
+                    a_scaled = self._center_normalize_action(a_rot, self.ee_center)
+                    # centers.append(self.center)
                 else:
                     a_scaled = self._normalize_action(a_rot)
-                    centers.append(self.center)
+                    # centers.append(self.center)
                 actions.append(a_scaled)
             j+=1
 
@@ -845,7 +843,7 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
             obs_pos = actions[start_ts-1]
         else:
             if self.center_action:
-                obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]), centers[start_ts])
+                obs_pos = self._center_normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]), self.ee_center)
             else:
                 obs_pos = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04]))
         

@@ -7,18 +7,8 @@ from scipy.spatial.transform import Rotation
 def fix_real_action(action7d):
     if action7d[5] < -120:
         action7d[5] = 180 + 180 - np.abs(action7d[5])
-        action7d[4] = -action7d[4]
-        action7d[3] = -action7d[3] # flip the x rotation
         return action7d
 
-    elif action7d[5] < -90:
-        action7d[3] = -action7d[3] # flip the x rotation
-        return action7d
-
-    elif action7d[5] > 90:
-        action7d[3] = -action7d[3] # flip the x rotation
-        return action7d
-    
     else:
         return action7d
 
@@ -33,23 +23,30 @@ def rotate_action(action, center, rot):
     x = pts[0, 0]
     y = pts[0, 1]
 
-    R_obj_in_world = Rotation.from_euler('zxy', [action[5], action[3], action[4]], degrees=True)
+    # R_obj_in_world = Rotation.from_euler('zxy', [action[5], action[3], action[4]], degrees=True)
+    # R_newframe_in_world = Rotation.from_euler('z', rot, degrees=True)
+    # R_obj_in_newframe = R_newframe_in_world.inv() * R_obj_in_world
+    # rz_new, rx_new, ry_new = R_obj_in_newframe.as_euler('zxy', degrees=True)
+
+    # testing xyz convention
+    R_obj_in_world = Rotation.from_euler('xyz', [action[3], action[4], action[5]], degrees=True)
     R_newframe_in_world = Rotation.from_euler('z', rot, degrees=True)
     R_obj_in_newframe = R_newframe_in_world.inv() * R_obj_in_world
-    rz_new, rx_new, ry_new = R_obj_in_newframe.as_euler('zxy', degrees=True)
+    rx_new, ry_new, rz_new = R_obj_in_newframe.as_euler('xyz', degrees=True)
 
     action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
 
     # first check rz to wrap within expected range
     if action_aug[5] > 225:
         action_aug[5] = -(360 - action_aug[5])
-
     # check if in the unexecutable zone
     if action_aug[5] < -120 and action_aug[5] >= -135:
         action_aug[5] = -119
+    # check if need to wrap angles for unexecutable zone
     elif action_aug[5] < -120:
         action_aug[5] = 180 + 180 - np.abs(action_aug[5])
         # action_aug[4] = -action_aug[4]
+    # check if need to wrap angles for unexecutable zone
     elif action_aug[5] > 210:
         action_aug[5] = 209
         
@@ -74,7 +71,8 @@ for i in tqdm(range(20)):
 
 
         # load in the center
-        ctr = np.load(traj_path + '/pcl_center' + str(j-1) + '.npy')
+        # ctr = np.load(traj_path + '/pcl_center' + str(j-1) + '.npy')
+        ctr = np.array([0.608, 0.014, 0.125])
 
         for k in range(360):
             rotated_action = rotate_action(action7d, ctr, k)
