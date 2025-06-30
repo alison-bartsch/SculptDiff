@@ -14,7 +14,7 @@ import torch
 
 
 # exp name
-exp_name = 'new_data_16_pred_fixed_dataloader' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
+exp_name = 'new_data_16_pred_final_correct_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -93,8 +93,6 @@ noise_pred_net = ConditionalUnet1D(
 nets = nn.ModuleDict({
     'pointbert_encoder': pointbert_encoder,
     'projection_head': projection_head,
-    # 'pointbert_encoder2': pointbert_encoder2,
-    # 'projection_head2': projection_head2,
     'noise_pred_net': noise_pred_net
 })
 

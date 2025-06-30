@@ -71,8 +71,17 @@ class ClayDataset(torch.utils.data.Dataset):
         # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 180, 0.016])
         
 
-        a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
-        a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
+        # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -180, 0.008])
+        # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
+
+
+        # a_mins7d = np.array([0.5340, -0.0549, 0.1272, -360, -11.68, -119, 0.008])
+        # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 11.68, 240, 0.016])
+
+
+
+        a_mins7d = np.array([0.2188, -0.1150, 0.1272, -360, -50, -120, 0.008])
+        a_maxs7d = np.array([0.7376, 0.1007, 0.1600, 360, 50, 240, 0.016])
 
         norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
         norm_action = norm_action  * 2 - 1 # set to [-1, 1]
@@ -118,56 +127,114 @@ class ClayDataset(torch.utils.data.Dataset):
     #     action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
     #     return action_aug
 
-    def _rotate_action(self, action, center, rot):
-        pose_6d = action[:6]
-        position = pose_6d[:3]
-        orientation = pose_6d[3:]
+    # def _rotate_action(self, action, center, rot):
+    #     pose_6d = action[:6]
+    #     position = pose_6d[:3]
+    #     orientation = pose_6d[3:]
 
-        cx, cy, cz = center
-        px, py, pz = position
+    #     cx, cy, cz = center
+    #     px, py, pz = position
 
-        # Step 1: Translate point to origin (centered at cx, cy)
-        dx = px - cx
-        dy = py - cy
+    #     # Step 1: Translate point to origin (centered at cx, cy)
+    #     dx = px - cx
+    #     dy = py - cy
 
-        # Step 2: Rotate in XY plane
-        cos_theta = np.cos(math.radians(rot))
-        sin_theta = np.sin(math.radians(rot))
+    #     # Step 2: Rotate in XY plane
+    #     cos_theta = np.cos(math.radians(rot))
+    #     sin_theta = np.sin(math.radians(rot))
 
-        rotated_x = cos_theta * dx - sin_theta * dy + cx
-        rotated_y = sin_theta * dx + cos_theta * dy + cy
-        rotated_z = pz  # unchanged
+    #     rotated_x = cos_theta * dx - sin_theta * dy + cx
+    #     rotated_y = sin_theta * dx + cos_theta * dy + cy
+    #     rotated_z = pz  # unchanged
 
-        new_position = np.array([rotated_x, rotated_y, rotated_z])
+    #     new_position = np.array([rotated_x, rotated_y, rotated_z])
 
-        # Step 3: Update orientation
-        # Apply additional rotation about the Z-axis (pre-multiplied)
-        original_rot = Rotation.from_euler('xyz', orientation, degrees=True)
-        z_rotation = Rotation.from_euler('z', rot, degrees=True)
-        new_rot =  original_rot * z_rotation
-        new_orientation = new_rot.as_euler('xyz', degrees=True)
+    #     # Step 3: Update orientation
+    #     # Apply additional rotation about the Z-axis (pre-multiplied)
+    #     original_rot = Rotation.from_euler('xyz', orientation, degrees=True)
+    #     z_rotation = Rotation.from_euler('z', rot, degrees=True)
+    #     new_rot =  original_rot * z_rotation
+    #     new_orientation = new_rot.as_euler('xyz', degrees=True)
 
-        return np.concatenate([new_position, new_orientation, action[6:]])
+    #     return np.concatenate([new_position, new_orientation, action[6:]])
     
-    def _wrap_rz(self, original_rz):
-        wrapped_rz = (original_rz + 90) % 180 - 90
-        return wrapped_rz
+    # def _wrap_rz(self, original_rz):
+    #     wrapped_rz = (original_rz + 90) % 180 - 90
+    #     return wrapped_rz
 
-    def _fix_action_rotations(self, action7d):
-        if action7d[5] < -90:
-            if action7d[3] < 0:
-                action7d[4] = -action7d[4]
-            else:
-                action7d[3] = -action7d[3]
-                action7d[4] = -action7d[4]
+    # def _fix_action_rotations(self, action7d):
+    #     if action7d[5] < -90:
+    #         if action7d[3] < 0:
+    #             action7d[4] = -action7d[4]
+    #         else:
+    #             action7d[3] = -action7d[3]
+    #             action7d[4] = -action7d[4]
 
-        if action7d[5] > 90:
+    #     if action7d[5] > 90:
+    #         action7d[4] = -action7d[4]
+
+    #     if np.abs(action7d[5]) < 90:
+    #         action7d[4] = -action7d[4]
+
+    #     return action7d
+
+    def _fix_real_action(self, action7d):
+        # if action7d[5] < -120:
+        #     action7d[5] = 180 + 180 - np.abs(action7d[5])
+        #     action7d[4] = -action7d[4]
+        #     return action7d
+        # else:
+        #     return action7d
+
+        if action7d[5] < -120:
+            action7d[5] = 180 + 180 - np.abs(action7d[5])
             action7d[4] = -action7d[4]
+            action7d[3] = -action7d[3] # flip the x rotation
+            return action7d
 
-        if np.abs(action7d[5]) < 90:
-            action7d[4] = -action7d[4]
+        elif action7d[5] < -90:
+            action7d[3] = -action7d[3] # flip the x rotation
+            return action7d
 
-        return action7d
+        elif action7d[5] > 90:
+            action7d[3] = -action7d[3] # flip the x rotation
+            return action7d
+        
+        else:
+            return action7d
+
+    def _rotate_action(self, action, center, rot):
+        # given the center and rot about z in degrees, create the transform to for the points action[0:2]
+        pts = np.array([[action[0], action[1], action[2]]])
+        # rotate pts about center by rot degrees
+        pts = pts - center
+        R = Rotation.from_euler('z', np.radians(-rot), degrees=False).as_matrix()
+        pts = R @ pts.T
+        pts = pts.T + center
+        x = pts[0, 0]
+        y = pts[0, 1]
+
+        R_obj_in_world = Rotation.from_euler('zxy', [action[5], action[3], action[4]], degrees=True)
+        R_newframe_in_world = Rotation.from_euler('z', rot, degrees=True)
+        R_obj_in_newframe = R_newframe_in_world.inv() * R_obj_in_world
+        rz_new, rx_new, ry_new = R_obj_in_newframe.as_euler('zxy', degrees=True)
+
+        action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
+
+        # first check rz to wrap within expected range
+        if action_aug[5] > 225:
+            action_aug[5] = -(360 - action_aug[5])
+
+        # check if in the unexecutable zone
+        if action_aug[5] < -120 and action_aug[5] >= -135:
+            action_aug[5] = -119
+        elif action_aug[5] < -120:
+            action_aug[5] = 180 + 180 - np.abs(action_aug[5])
+            # action_aug[4] = -action_aug[4]
+        elif action_aug[5] > 210:
+            action_aug[5] = 209
+            
+        return action_aug
     
     def __len__(self):
         """
@@ -201,9 +268,8 @@ class ClayDataset(torch.utils.data.Dataset):
                 # # NOTE: need to go through and verify the action is correct (i.e. wrapping rz is flipping rx, etc.)
                 # a_rot = self._rotate_action(a, ctr, aug_rot)
 
-                a = self._fix_action_rotations(a)
+                a = self._fix_real_action(a)
                 a_rot = self._rotate_action(a, ctr, aug_rot)
-                a_rot = self._fix_action_rotations(a_rot)
                 if self.center_action:
                     a_scaled = self._center_normalize_action(a_rot, ctr)
                     centers.append(ctr)

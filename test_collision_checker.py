@@ -22,12 +22,22 @@ def create_grippers(action7d, ee_dist=0.05, color=[0.8, 0.8, 0.8], cylinder_radi
 
     # Apply the action7d transformations
     translation = action7d[:3]  # x, y, z translation
-    rotation = action7d[3:6]  # roll, pitch, yaw in degrees
-    rotation_matrix = o3d.geometry.get_rotation_matrix_from_xyz(np.radians(rotation))
 
-    cylinder1.rotate(rotation_matrix, center=(0, 0, 0))  # Apply rotation around the origin
+    # # all the rotations together
+    # rotation = action7d[3:6]  # roll, pitch, yaw in degrees
+    # rotation_matrix = o3d.geometry.get_rotation_matrix_from_xyz(np.radians(rotation))
+    # cylinder1.rotate(rotation_matrix, center=(0, 0, 0))  # Apply rotation around the origin
+    # cylinder2.rotate(rotation_matrix, center=(0, 0, 0))  # Apply rotation around the origin
+
+    # separate out the yaw and then the roll and pitch to be relative to the yaw
+    z_rotation = o3d.geometry.get_rotation_matrix_from_xyz((0, 0, np.radians(action7d[5])))
+    roll_pitch_rotation = o3d.geometry.get_rotation_matrix_from_xyz(np.radians(np.array([action7d[3], action7d[4], 0])))
+    cylinder1.rotate(z_rotation, center=(0, 0, 0))  # Apply yaw rotation around the origin
+    cylinder2.rotate(z_rotation, center=(0, 0, 0))  # Apply yaw rotation around the origin
+    cylinder1.rotate(roll_pitch_rotation, center=(0, 0, 0))  # Apply roll and pitch rotation around the origin
+    cylinder2.rotate(roll_pitch_rotation, center=(0, 0, 0))  # Apply roll and pitch rotation around the origin
+
     cylinder1.translate(translation)  # Apply translation
-    cylinder2.rotate(rotation_matrix, center=(0, 0, 0))  # Apply rotation around the origin
     cylinder2.translate(translation)  # Apply translation
     return cylinder1, cylinder2
 

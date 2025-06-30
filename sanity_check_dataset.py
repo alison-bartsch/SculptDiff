@@ -20,6 +20,64 @@ def rotate_pcl(state, center, rot):
     pcl_aug = state.T + center
     return pcl_aug
 
+def fix_real_action(action7d):
+    print("Rz: ", action7d[5])
+    if action7d[5] < -120:
+        print("wrapping the rotation")
+        action7d[5] = 180 + 180 - np.abs(action7d[5])
+        action7d[4] = -action7d[4]
+        action7d[3] = -action7d[3] # flip the x rotation
+        return action7d
+
+    elif action7d[5] < -90:
+        print("flipping the x rotation for action: ", action7d[5])
+        action7d[3] = -action7d[3] # flip the x rotation
+        return action7d
+
+    elif action7d[5] > 90:
+        print("Flipping x rotation for action: ", action7d[5])
+        action7d[3] = -action7d[3] # flip the x rotation
+        return action7d
+    
+    else:
+        return action7d
+
+def rotate_action(action, center, rot):
+    # given the center and rot about z in degrees, create the transform to for the points action[0:2]
+    pts = np.array([[action[0], action[1], action[2]]])
+    # rotate pts about center by rot degrees
+    pts = pts - center
+    R = Rotation.from_euler('z', np.radians(-rot), degrees=False).as_matrix()
+    pts = R @ pts.T
+    pts = pts.T + center
+    x = pts[0, 0]
+    y = pts[0, 1]
+    
+
+    R_obj_in_world = Rotation.from_euler('zxy', [action[5], action[3], action[4]], degrees=True)
+    R_newframe_in_world = Rotation.from_euler('z', rot, degrees=True)
+    R_obj_in_newframe = R_newframe_in_world.inv() * R_obj_in_world
+    rz_new, rx_new, ry_new = R_obj_in_newframe.as_euler('zxy', degrees=True)
+
+    print("Rz new: ", rz_new, "Rx new: ", rx_new, "Ry new: ", ry_new)
+
+    action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
+
+    # first check rz to wrap within expected range
+    if action_aug[5] > 225:
+        action_aug[5] = -(360 - action_aug[5])
+
+    # check if in the unexecutable zone
+    if action_aug[5] < -120 and action_aug[5] >= -135:
+        action_aug[5] = -119
+    elif action_aug[5] < -120:
+        action_aug[5] = 180 + 180 - np.abs(action_aug[5])
+        # action_aug[4] = -action_aug[4]
+    elif action_aug[5] > 210:
+        action_aug[5] = 209
+        
+    return action_aug
+
 # def rotate_action(action, center, rot):
 #     unit_circle_og_grasp = (action[0] - center[0], action[1] - center[1])
 #     rot_original = math.degrees(math.atan2(unit_circle_og_grasp[1], unit_circle_og_grasp[0]))
@@ -58,83 +116,83 @@ def rotate_pcl(state, center, rot):
 #     action_aug = np.array([x, y, action[2], rx_new, ry_new, rz_new, action[6]]) # NOTE: for now we are keeping rx and ry the same
 #     return action_aug
 
-def rotate_action(action, center, rot):
-    # convert rotation to radians
-    # angle_rad = math.radians(rot)
+# def rotate_action(action, center, rot):
+#     # convert rotation to radians
+#     # angle_rad = math.radians(rot)
     
-    pose_6d = action[:6]
-    position = pose_6d[:3]
-    orientation = pose_6d[3:]
+#     pose_6d = action[:6]
+#     position = pose_6d[:3]
+#     orientation = pose_6d[3:]
 
-    cx, cy, cz = center
-    px, py, pz = position
+#     cx, cy, cz = center
+#     px, py, pz = position
 
-    # Step 1: Translate point to origin (centered at cx, cy)
-    dx = px - cx
-    dy = py - cy
+#     # Step 1: Translate point to origin (centered at cx, cy)
+#     dx = px - cx
+#     dy = py - cy
 
-    # Step 2: Rotate in XY plane
-    cos_theta = np.cos(math.radians(rot))
-    sin_theta = np.sin(math.radians(rot))
+#     # Step 2: Rotate in XY plane
+#     cos_theta = np.cos(math.radians(rot))
+#     sin_theta = np.sin(math.radians(rot))
 
-    rotated_x = cos_theta * dx - sin_theta * dy + cx
-    rotated_y = sin_theta * dx + cos_theta * dy + cy
-    rotated_z = pz  # unchanged
+#     rotated_x = cos_theta * dx - sin_theta * dy + cx
+#     rotated_y = sin_theta * dx + cos_theta * dy + cy
+#     rotated_z = pz  # unchanged
 
-    new_position = np.array([rotated_x, rotated_y, rotated_z])
+#     new_position = np.array([rotated_x, rotated_y, rotated_z])
 
-    # Step 3: Update orientation
-    # Apply additional rotation about the Z-axis (pre-multiplied)
-    original_rot = Rotation.from_euler('xyz', orientation, degrees=True)
-    z_rotation = Rotation.from_euler('z', rot, degrees=True)
-    new_rot =  original_rot * z_rotation
-    new_orientation = new_rot.as_euler('xyz', degrees=True)
+#     # Step 3: Update orientation
+#     # Apply additional rotation about the Z-axis (pre-multiplied)
+#     original_rot = Rotation.from_euler('xyz', orientation, degrees=True)
+#     z_rotation = Rotation.from_euler('z', rot, degrees=True)
+#     new_rot =  original_rot * z_rotation
+#     new_orientation = new_rot.as_euler('xyz', degrees=True)
 
 
-    # if new_orientation[2] < -90:
-    #     if new_orientation[0] < 0:
-    #         new_orientation[1] = -new_orientation[1]
-    #     else:
-    #         new_orientation[0] = -new_orientation[0]
-    #         new_orientation[1] = -new_orientation[1]
+#     # if new_orientation[2] < -90:
+#     #     if new_orientation[0] < 0:
+#     #         new_orientation[1] = -new_orientation[1]
+#     #     else:
+#     #         new_orientation[0] = -new_orientation[0]
+#     #         new_orientation[1] = -new_orientation[1]
 
-    # if new_orientation[2] > 90:
-    #     new_orientation[1] = -new_orientation[1]
+#     # if new_orientation[2] > 90:
+#     #     new_orientation[1] = -new_orientation[1]
 
-    # if np.abs(new_orientation[2]) < 90:
-    #     new_orientation[1] = -new_orientation[1]
+#     # if np.abs(new_orientation[2]) < 90:
+#     #     new_orientation[1] = -new_orientation[1]
 
-    return np.concatenate([new_position, new_orientation])
+#     return np.concatenate([new_position, new_orientation])
 
 # NOTE: as we are changing the z rotation, we want to preserve the pitch and roll, but w.r.t the new z rotation
 
-def preserve_pitch_roll(r_x, r_y, r_z, z_rotation_change):
-    '''
-    Given z_rotation change, we add that rotation change to r_z (update the yaw).
-    However, we would like to update r_x and r_y to preserve the pitch and roll w.r.t the new yaw.
-    '''
-    # convert to radians
-    r_x = math.radians(r_x)
-    r_y = math.radians(r_y)
-    r_z = math.radians(r_z)
-    z_rotation_change = math.radians(z_rotation_change)
+# def preserve_pitch_roll(r_x, r_y, r_z, z_rotation_change):
+#     '''
+#     Given z_rotation change, we add that rotation change to r_z (update the yaw).
+#     However, we would like to update r_x and r_y to preserve the pitch and roll w.r.t the new yaw.
+#     '''
+#     # convert to radians
+#     r_x = math.radians(r_x)
+#     r_y = math.radians(r_y)
+#     r_z = math.radians(r_z)
+#     z_rotation_change = math.radians(z_rotation_change)
 
-    # calculate the new pitch and roll
-    r_x_new = math.asin(math.cos(z_rotation_change)*math.sin(r_x) + math.sin(z_rotation_change)*math.cos(r_x)*math.sin(r_y))
-    r_y_new = math.asin(math.cos(r_x)*math.sin(r_y))
-    r_z_new = r_z + z_rotation_change
+#     # calculate the new pitch and roll
+#     r_x_new = math.asin(math.cos(z_rotation_change)*math.sin(r_x) + math.sin(z_rotation_change)*math.cos(r_x)*math.sin(r_y))
+#     r_y_new = math.asin(math.cos(r_x)*math.sin(r_y))
+#     r_z_new = r_z + z_rotation_change
 
-    # convert back to degrees
-    r_x_new = math.degrees(r_x_new)
-    r_y_new = math.degrees(r_y_new)
-    r_z_new = math.degrees(r_z_new)
+#     # convert back to degrees
+#     r_x_new = math.degrees(r_x_new)
+#     r_y_new = math.degrees(r_y_new)
+#     r_z_new = math.degrees(r_z_new)
 
-    return r_x_new, r_y_new, r_z_new
+#     return r_x_new, r_y_new, r_z_new
 
 if __name__ == "__main__":
 
-    for i in range(19,20):
-        j = 10
+    for i in range(20):
+        j = 1
         r_idx = 0
         traj_path = '/home/alison/Documents/June18_Human_Demos_Train/Trajectory' + str(i)
 
@@ -148,25 +206,56 @@ if __name__ == "__main__":
             # load unnormalized action
             action7d = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
 
-            # # flip the rotation once 
-            # if np.abs(action7d[5]) > 90:
-            #     action7d[3] = -action7d[3]
+            # # # flip the rotation once 
+            # # if np.abs(action7d[5]) > 90:
+            # #     action7d[3] = -action7d[3]
+
+            # if action7d[5] < -90:
+            #     if action7d[3] < 0:
+            #         action7d[4] = -action7d[4]
+            #     else:
+            #         action7d[3] = -action7d[3]
+            #         action7d[4] = -action7d[4]
+
+            # if action7d[5] > 90:
+            #     action7d[4] = -action7d[4]
+
+            # if np.abs(action7d[5]) < 90:
+            #     action7d[4] = -action7d[4]
 
 
 
+            # fix the action7d to be in the correct range
+            action7d = fix_real_action(action7d)
 
-            if action7d[5] < -90:
-                if action7d[3] < 0:
-                    action7d[4] = -action7d[4]
-                else:
-                    action7d[3] = -action7d[3]
-                    action7d[4] = -action7d[4]
+            # # first check which quadrant the initial unrotated action lies
+            # if action7d[5] >= -90 and action7d[5] < 0:
+            #     q_idx = 0
+            #     print("\nQ1")
+            # elif action7d[5] >= 0 and action7d[5] < 90:
+            #     q_idx = 1
+            #     print("\nQ2")
+            # elif action7d[5] >= 90 and action7d[5] < 180:
+            #     q_idx = 2
+            #     print("\nQ3")
+            # elif (action7d[5] >= 180 and action7d[5] < 210) or (action7d[5] >= -120 and action7d[5] < -90):
+            #     q_idx = 3
+            #     print("\nQ4")
+            # else:
+            #     print("\nUnrecognized quadrant for action: ", action7d[5])
+            
+            # # quadrant_order = [0, 1, 2, 3] # Q1, Q2, Q3, Q4
+            # quadrant_dict = {0: {'min': -90, 'max': 0},
+            #                 1: {'min': 0, 'max': 90},
+            #                 2: {'min': 90, 'max': 180},
+            #                 3: {'min': 180, 'max': 210},
+            #                 4: {'min': -120, 'max': -90}} # Q4
+            # # modifications = ['y', 'n', 'x', 'xy']
+            # # modifications = ['y', 'n', 'xy', 'x']
+            # modifications = ['n', 'xy', 'x', 'y']
 
-            if action7d[5] > 90:
-                action7d[4] = -action7d[4]
 
-            if np.abs(action7d[5]) < 90:
-                action7d[4] = -action7d[4]
+
 
             # print action7d rounded to 3 decimal places
             print("Action7D: ", np.round(action7d, 3))
@@ -199,12 +288,13 @@ if __name__ == "__main__":
             # vis_action[1] -= 0.025
             vis_action[2] -= 0.04
             vis_action[5] += 90
+            # NOTE: action vis need to render position at the top of the cylinders
             
             # if np.abs(action7d[5]) > 90:
             #     vis_action[3] = -vis_action[3] # flip the x rotation
             
             c1_og, c2_og = create_grippers(vis_action, color=[1,0,0]) #create_gripper_rectangle(action7d)
-            o3d.visualization.draw_geometries([c1_og, c2_og, pcl_o3d, arrow, arrow_y])
+            # o3d.visualization.draw_geometries([c1_og, c2_og, pcl_o3d, arrow, arrow_y])
 
             # # visualize a modified action with flipped x rotation
             # vis_action = copy.deepcopy(action7d)
@@ -236,19 +326,57 @@ if __name__ == "__main__":
                 rotated_action = rotate_action(action7d, ctr, k)
                 rotated_pcl = rotate_pcl(pcl_arr, ctr, k)
 
+
+                # add the relative 
+
                 
-                if rotated_action[5] < -90:
-                    if rotated_action[3] < 0:
-                        rotated_action[4] = -rotated_action[4]
-                    else:
-                        rotated_action[3] = -rotated_action[3]
-                        rotated_action[4] = -rotated_action[4]
+                # if rotated_action[5] < -90:
+                #     if rotated_action[3] < 0:
+                #         rotated_action[4] = -rotated_action[4]
+                #     else:
+                #         rotated_action[3] = -rotated_action[3]
+                #         rotated_action[4] = -rotated_action[4]
 
-                if rotated_action[5] > 90:
-                    rotated_action[4] = -rotated_action[4]
+                # if rotated_action[5] > 90:
+                #     rotated_action[4] = -rotated_action[4]
 
-                if np.abs(rotated_action[5]) < 90:
-                    rotated_action[4] = -rotated_action[4]
+                # if np.abs(rotated_action[5]) < 90:
+                #     rotated_action[4] = -rotated_action[4]
+
+
+                
+                # # whichever is the initial quadrant, set that to the starting point 
+                # for k in range(4):
+                #     idx = (q_idx + k) % 4
+                    
+                #     if rotated_action[5] >= quadrant_dict[idx]['min'] and rotated_action[5] < quadrant_dict[idx]['max']:
+                #         if modifications[k] == 'y':
+                #             print("changing y...")
+                #             rotated_action[4] = -rotated_action[4]
+                #         elif modifications[k] == 'x':
+                #             print("changing x...")
+                #             rotated_action[3] = -rotated_action[3] # alternate is 360 - x
+                #         elif modifications[k] == 'xy':
+                #             print("changing xy...")
+                #             rotated_action[3] = -rotated_action[3]
+                #             rotated_action[4] = -rotated_action[4]
+                #         else:
+                #             print("no change...")
+
+                #     if idx == 3:
+                #         if rotated_action[5] >= quadrant_dict[idx+1]['min'] and rotated_action[5] < quadrant_dict[idx+1]['max']:
+                #             if modifications[k] == 'y':
+                #                 print("changing y...")
+                #                 rotated_action[4] = -rotated_action[4]
+                #             elif modifications[k] == 'x':
+                #                 print("changing x...")
+                #                 rotated_action[3] = -rotated_action[3]
+                #             elif modifications[k] == 'xy':
+                #                 print("changing xy...")
+                #                 rotated_action[3] = -rotated_action[3]
+                #                 rotated_action[4] = -rotated_action[4]
+                #             else:
+                #                 print("no change...")
                 
                 
                 
