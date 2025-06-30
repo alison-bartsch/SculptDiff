@@ -1,0 +1,1 @@
+{'n_actions': 28, 'avg planning time': 1.0972087383270264, 'chamfer_distance': 0.014647409893506477, 'earth_movers_distance': 0.013169166945525532}

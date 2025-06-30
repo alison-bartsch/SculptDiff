@@ -1,12 +1,9 @@
 import os
-import cv2
 import time
 import math
 import copy
 import numpy as np
 import open3d as o3d
-from PIL import Image, ImageChops
-import matplotlib.pyplot as plt
 from test_collision_checker import create_grippers
 from scipy.spatial.transform import Rotation
 
@@ -26,18 +23,18 @@ def fix_real_action(action7d):
         print("wrapping the rotation")
         action7d[5] = 180 + 180 - np.abs(action7d[5])
         action7d[4] = -action7d[4]
-        action7d[3] = -action7d[3] # flip the x rotation
+        # action7d[3] = -action7d[3] # flip the x rotation
         return action7d
 
-    elif action7d[5] < -90:
-        print("flipping the x rotation for action: ", action7d[5])
-        action7d[3] = -action7d[3] # flip the x rotation
-        return action7d
+    # elif action7d[5] < -90:
+    #     print("flipping the x rotation for action: ", action7d[5])
+    #     action7d[3] = -action7d[3] # flip the x rotation
+    #     return action7d
 
-    elif action7d[5] > 90:
-        print("Flipping x rotation for action: ", action7d[5])
-        action7d[3] = -action7d[3] # flip the x rotation
-        return action7d
+    # elif action7d[5] > 90:
+    #     print("Flipping x rotation for action: ", action7d[5])
+    #     action7d[3] = -action7d[3] # flip the x rotation
+    #     return action7d
     
     else:
         return action7d
@@ -194,7 +191,8 @@ if __name__ == "__main__":
     for i in range(20):
         j = 1
         r_idx = 0
-        traj_path = '/home/alison/Documents/June18_Human_Demos_Train/Trajectory' + str(i)
+        # traj_path = '/home/alison/Documents/June18_Human_Demos_Train/Trajectory' + str(i)
+        traj_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory' + str(i)
 
         # initialize rectangle labels
         elem = np.array([[x, y, z] for x in np.linspace(-0.025, 0.025, 10) for y in np.linspace(-0.05, 0.05, 10) for z in np.linspace(-0.01, 0.01, 10)])
