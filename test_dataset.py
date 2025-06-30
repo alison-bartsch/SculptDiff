@@ -224,13 +224,14 @@ class ClayDataset(torch.utils.data.Dataset):
         # first check rz to wrap within expected range
         if action_aug[5] > 225:
             action_aug[5] = -(360 - action_aug[5])
-
         # check if in the unexecutable zone
         if action_aug[5] < -120 and action_aug[5] >= -135:
             action_aug[5] = -119
+        # check if need to wrap angles for unexecutable zone
         elif action_aug[5] < -120:
             action_aug[5] = 180 + 180 - np.abs(action_aug[5])
             # action_aug[4] = -action_aug[4]
+        # check if need to wrap angles for unexecutable zone
         elif action_aug[5] > 210:
             action_aug[5] = 209
             
