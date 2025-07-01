@@ -47,7 +47,13 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     # NOTE: this function cannot distinguish directional rotation goals for the wrist (i.e. rz)
     # first go to rz in the wrist joints
     local_joints = fa.get_joints()
-    local_joints[6] = math.radians(45-rz)
+    # local_joints[6] = math.radians(45-rz)
+    if rz < -100:
+        print("set intermediate rz...")
+        intermediate_rz = -100
+        local_joints[6] = math.radians(45-intermediate_rz)
+    else:
+        local_joints[6] = math.radians(45-rz)
     fa.goto_joints(local_joints, duration=9)
     final_joints = fa.get_joints()
     print("Executed to joint angle: ", math.degrees(final_joints[6]))
@@ -64,17 +70,24 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
 
     intermediate_pose = calculate_intermediate_pose(pose.copy())
 
-    # pre-rotating the base to speed up goto pose for extreme rotations (base joint is a bit sticky)
-    if (rz < -100) or (rz > 200):
-        cur_joints = fa.get_joints()
-        cur_joints[0] = 0.3
-        fa.goto_joints(cur_joints, duration=7)
-    elif (rz < -45) and (rz > -100):
-        cur_joints = fa.get_joints()
-        cur_joints[0] = -0.3
-        fa.goto_joints(cur_joints, duration=7)
+    # # pre-rotating the base to speed up goto pose for extreme rotations (base joint is a bit sticky)
+    # if (rz < -100) or (rz > 200):
+    #     cur_joints = fa.get_joints()
+    #     cur_joints[0] = 0.3
+    #     fa.goto_joints(cur_joints, duration=7)
+    # elif (rz < -45) and (rz > -100):
+    #     cur_joints = fa.get_joints()
+    #     cur_joints[0] = -0.3
+    #     fa.goto_joints(cur_joints, duration=7)
+
+    # fa.goto_pose(intermediate_pose, duration=15) # NOTE: used to be duration=6
 
     fa.goto_pose(intermediate_pose, duration=15) # NOTE: used to be duration=6
+
+    if rz < -105:
+        new_joints = fa.get_joints()
+        new_joints[6] = math.radians(45-rz)
+        fa.goto_joints(new_joints, duration=9)
 
     fa.goto_pose(pose, duration=5)
     fa.goto_gripper(d, force=60.0)
