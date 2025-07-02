@@ -74,10 +74,10 @@ dataloader = torch.utils.data.DataLoader(
     persistent_workers=True,
     collate_fn=collate_fn)
 
-min, max = dataset.get_action_min_max()
+min, max = dataset.get_dataset_min_max_stats()
 # save the min and max action values 
-np.save(join(ckpt_dir, '/action_mins.npy'), min)
-np.save(join(ckpt_dir, '/action_maxs.npy'), max)
+np.save(ckpt_dir + '/action_mins.npy', min)
+np.save(ckpt_dir + '/action_maxs.npy', max)
 
 # save experiment parameters as a dictionary
 exp_params = {'exp_name': exp_name,

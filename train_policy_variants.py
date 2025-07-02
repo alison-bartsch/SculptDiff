@@ -69,10 +69,10 @@ def train_diffusion_policy(ckpt_dir, training_params):
         # don't kill worker process after each epoch
         persistent_workers=True)
 
-    min, max = dataset.get_action_min_max()
+    min, max = dataset.get_dataset_min_max_stats()
     # save the min and max action values 
-    np.save(join(ckpt_dir, '/action_mins.npy'), min)
-    np.save(join(ckpt_dir, '/action_maxs.npy'), max)
+    np.save(ckpt_dir + '/action_mins.npy', min)
+    np.save(ckpt_dir + '/action_maxs.npy', max)
 
     # save experiment parameters as a dictionary
     exp_params = {'exp_name': ckpt_dir.split('/')[-1],
