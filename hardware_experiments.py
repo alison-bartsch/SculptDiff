@@ -463,7 +463,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             print("\nCentered Dists: ", centered_dists)
             
             # if that action was predicted to be the final action, then terminate the experiment
-            if terminate > 0:
+            if terminate > 0.95:
                 in_progress = False
                 break
 
