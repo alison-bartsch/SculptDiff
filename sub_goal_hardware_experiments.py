@@ -167,15 +167,14 @@ def subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_schedu
 # 	fa.goto_gripper(d, force=60.0)
 # 	time.sleep(3)
 
-def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_shape, ckpt_dir, done_queue, centered_action, sub_goal_step, nested_sub_goal_list, collision_check, discounted):
+def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_shape, ckpt_dir, done_queue, pred_horizon, execute_horizon, centered_action, sub_goal_step, nested_sub_goal_list, collision_check, discounted):
     '''
     '''
     # define diffusion parameters
     obs_horizon = 1
     B = 1
-    pred_horizon = 12
+    # pred_horizon = 12
     subgoal_stepsize = 4
-    execute_horizon = 12 # 6 # sub_goal_step
     action_dim = 8
     num_diffusion_iters = 100
     noise_scheduler = DDPMScheduler(
@@ -522,6 +521,7 @@ if __name__ == '__main__':
     centered_action = False
     sub_goal_step = 4
     pred_horizon = 16
+    execute_horizon = 16
     collision_check = False
     discounted = True
     # -------------------------------------------------------------------
@@ -548,13 +548,14 @@ if __name__ == '__main__':
                 'centered_action: ', centered_action,
                 'sub_goal_step: ', sub_goal_step,
                 'pred_horizon: ', pred_horizon,
+                'execute_horizon: ', execute_horizon,
                 'collision_check: ', collision_check,}
     
     with open(exp_save + '/experiment_params.txt', 'w') as f:
         f.write(str(exp_dict))
 
     # TODO: load in the list of autoregressively generated sub-goals
-    sub_goal_load_path = '/home/alison/Documents/GitHub/SculptDiff/subgoals/train/step' + str(sub_goal_step) + '/'
+    sub_goal_load_path = '/home/alison/Documents/GitHub/SculptDiff/subgoals/test/step' + str(sub_goal_step) + '/'
     # sub_goal_name = 'autoregressive_subgoal'
     sub_goal_name = 'unnormalized_pointcloud' # 'gt_subgoal'
     sub_goal_list = []
@@ -615,7 +616,7 @@ if __name__ == '__main__':
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, sub_goal_step, nested_sub_goal_list, collision_check, discounted))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, pred_horizon, execute_horizon, centered_action, sub_goal_step, nested_sub_goal_list, collision_check, discounted))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, video_save_path, done_queue))
 
     main_thread.start()
