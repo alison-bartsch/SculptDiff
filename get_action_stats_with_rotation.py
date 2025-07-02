@@ -15,13 +15,13 @@ def fix_real_action(action7d):
     if action7d[5] > 225:
         action7d[5] = -(360 - action7d[5])
     # check if in the unexecutable zone
-    if action7d[5] < -120 and action7d[5] >= -135:
+    if action7d[5] < -117 and action7d[5] >= -135:
         action7d[5] = -117
     # check if need to wrap angles for unexecutable zone
-    elif action7d[5] < -120:
+    if action7d[5] < -120:
         action7d[5] = 180 + 180 - np.abs(action7d[5])
     # check if need to wrap angles for unexecutable zone
-    elif action7d[5] > 210:
+    if action7d[5] > 207:
         action7d[5] = 207
 
     if action7d[3] < -45:
@@ -59,14 +59,14 @@ def rotate_action(action, center, rot):
     if action_aug[5] > 225:
         action_aug[5] = -(360 - action_aug[5])
     # check if in the unexecutable zone
-    if action_aug[5] < -120 and action_aug[5] >= -135:
-        action_aug[5] = -119
+    if action_aug[5] < -117 and action_aug[5] >= -135:
+        action_aug[5] = -117
     # check if need to wrap angles for unexecutable zone
-    elif action_aug[5] < -120:
+    if action_aug[5] < -120:
         action_aug[5] = 180 + 180 - np.abs(action_aug[5])
     # check if need to wrap angles for unexecutable zone
-    elif action_aug[5] > 210:
-        action_aug[5] = 209
+    if action_aug[5] > 207:
+        action_aug[5] = 207
         
     return action_aug
 
@@ -90,16 +90,16 @@ for i in tqdm(range(20)):
         action_maxs = np.maximum(action_maxs, action7d)
 
 
-        # # load in the center
-        # # ctr = np.load(traj_path + '/pcl_center' + str(j-1) + '.npy')
-        # ctr = np.array([0.608, 0.014, 0.125])
+        # load in the center
+        # ctr = np.load(traj_path + '/pcl_center' + str(j-1) + '.npy')
+        ctr = np.array([0.608, 0.014, 0.125])
 
-        # for k in range(360):
-        #     rotated_action = rotate_action(action7d, ctr, k)
+        for k in range(360):
+            rotated_action = rotate_action(action7d, ctr, k)
 
-        #     # check if each action elem is less than action_mins
-        #     action_mins = np.minimum(action_mins, rotated_action)
-        #     action_maxs = np.maximum(action_maxs, rotated_action)
+            # check if each action elem is less than action_mins
+            action_mins = np.minimum(action_mins, rotated_action)
+            action_maxs = np.maximum(action_maxs, rotated_action)
 
         j+=1
 

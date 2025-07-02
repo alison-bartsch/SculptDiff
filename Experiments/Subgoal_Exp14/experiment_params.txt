@@ -1,0 +1,1 @@
+{'pottery', False, 'sub_goal_step: ', 4, 'execute_horizon: ', 'goal: ', 'collision_check: ', '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_new_data_16_pred_june30_updated_augs', 'pred_horizon: ', 16, 'model: ', 'centered_action: '}
