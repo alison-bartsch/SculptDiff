@@ -5,12 +5,25 @@ from tqdm import tqdm
 from scipy.spatial.transform import Rotation
 
 def fix_real_action(action7d):
-    if action7d[5] < -120:
-        action7d[5] = 180 + 180 - np.abs(action7d[5])
-        return action7d
+    # if action7d[5] < -120:
+    #     action7d[5] = 180 + 180 - np.abs(action7d[5])
+    #     return action7d
 
-    else:
-        return action7d
+    # else:
+    #     return action7d
+
+    if action7d[5] > 225:
+        action7d[5] = -(360 - action7d[5])
+    # check if in the unexecutable zone
+    if action7d[5] < -120 and action7d[5] >= -135:
+        action7d[5] = -117
+    # check if need to wrap angles for unexecutable zone
+    elif action7d[5] < -120:
+        action7d[5] = 180 + 180 - np.abs(action7d[5])
+    # check if need to wrap angles for unexecutable zone
+    elif action7d[5] > 210:
+        action7d[5] = 207
+    return action7d
 
 def rotate_action(action, center, rot):
     # given the center and rot about z in degrees, create the transform to for the points action[0:2]
@@ -45,7 +58,6 @@ def rotate_action(action, center, rot):
     # check if need to wrap angles for unexecutable zone
     elif action_aug[5] < -120:
         action_aug[5] = 180 + 180 - np.abs(action_aug[5])
-        # action_aug[4] = -action_aug[4]
     # check if need to wrap angles for unexecutable zone
     elif action_aug[5] > 210:
         action_aug[5] = 209
@@ -63,23 +75,27 @@ for i in tqdm(range(20)):
     while os.path.exists(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy'):  
         # load unnormalized action
         action7d = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
+        # print("\nAction before fix: ", action7d)
         action7d = fix_real_action(action7d)
+
+        if action7d[3] > 0:
+            print("\n\n\n\nRx positive: ", action7d[3])
 
         # check if each action elem is less than action_mins
         action_mins = np.minimum(action_mins, action7d)
         action_maxs = np.maximum(action_maxs, action7d)
 
 
-        # load in the center
-        # ctr = np.load(traj_path + '/pcl_center' + str(j-1) + '.npy')
-        ctr = np.array([0.608, 0.014, 0.125])
+        # # load in the center
+        # # ctr = np.load(traj_path + '/pcl_center' + str(j-1) + '.npy')
+        # ctr = np.array([0.608, 0.014, 0.125])
 
-        for k in range(360):
-            rotated_action = rotate_action(action7d, ctr, k)
+        # for k in range(360):
+        #     rotated_action = rotate_action(action7d, ctr, k)
 
-            # check if each action elem is less than action_mins
-            action_mins = np.minimum(action_mins, rotated_action)
-            action_maxs = np.maximum(action_maxs, rotated_action)
+        #     # check if each action elem is less than action_mins
+        #     action_mins = np.minimum(action_mins, rotated_action)
+        #     action_maxs = np.maximum(action_maxs, rotated_action)
 
         j+=1
 

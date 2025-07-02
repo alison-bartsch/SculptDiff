@@ -579,16 +579,19 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         prev_actions = actions[0:start_ts]
         # reverse the previous actions to get the backward trajectory
         prev_actions = prev_actions[::-1] # this way we get most recent previous action first
-        prev_actions = np.stack(prev_actions, axis=0)
-        prev_stop_tokens = -1 * np.ones((prev_actions.shape[0], 1))
-        prev_actions = np.concatenate((prev_actions, prev_stop_tokens), axis=1)
+        
+        if len(prev_actions) != 0:
+            prev_actions = np.stack(prev_actions, axis=0)
+            prev_stop_tokens = -1 * np.ones((prev_actions.shape[0], 1))
+            prev_actions = np.concatenate((prev_actions, prev_stop_tokens), axis=1)
         prev_action_len = start_ts
 
         if prev_action_len < self.pred_horizon:
             padded_prev_action = np.zeros((self.pred_horizon, 8))
-            padded_prev_action[:prev_action_len] = prev_actions
+            if len(prev_actions) != 0:
+                padded_prev_action[:prev_action_len] = prev_actions
             for i in range(prev_action_len, self.pred_horizon):
-                padded_prev_action[i] = self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04])) # pad with obs pos
+                padded_prev_action[i] = np.concatenate((self._normalize_action(np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04])), -1*np.ones(1))) # pad with obs pos
         else:
             padded_prev_action = prev_actions[:self.pred_horizon]
 
