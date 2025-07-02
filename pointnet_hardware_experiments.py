@@ -1,6 +1,7 @@
 import os
 import cv2
 import time
+import math
 import torch
 import queue
 import threading
@@ -16,7 +17,7 @@ from scipy.spatial.transform import Rotation
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
 
-def calculate_intermediate_pose(final_pose, dist=0.05):
+def calculate_intermediate_pose(final_pose, dist=0.055):
     """
     Calculate an intermediate pose for the robot to move before executing the grasp.
     Specifically, find the position of the gripper at a distance of [dist] from the final pose
@@ -42,20 +43,40 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
 
     :param fa:  franka robot class instantiation
     """
+    # NOTE: this function cannot distinguish directional rotation goals for the wrist (i.e. rz)
+    # first go to rz in the wrist joints
+    local_joints = fa.get_joints()
+    # local_joints[6] = math.radians(45-rz)
+    if rz < -100:
+        print("set intermediate rz...")
+        intermediate_rz = -100
+        local_joints[6] = math.radians(45-intermediate_rz)
+    else:
+        local_joints[6] = math.radians(45-rz)
+    fa.goto_joints(local_joints, duration=9)
+    final_joints = fa.get_joints()
+    print("Executed to joint angle: ", math.degrees(final_joints[6]))
+
     pose = fa.get_pose()
     starting_rot = pose.rotation
     orig = Rotation.from_matrix(starting_rot)
     orig_euler = orig.as_euler('xyz', degrees=True)
-    rot_vec = np.array([rx, ry, rz])
+    rot_vec = np.array([rx, ry, 0])
     new_euler = orig_euler + rot_vec
     r = Rotation.from_euler('xyz', new_euler, degrees=True)
     pose.rotation = r.as_matrix()
     pose.translation = np.array([x, y, z])
 
     intermediate_pose = calculate_intermediate_pose(pose.copy())
-    fa.goto_pose(intermediate_pose)
 
-    fa.goto_pose(pose)
+    fa.goto_pose(intermediate_pose, duration=15) # NOTE: used to be duration=6
+
+    if rz < -105:
+        new_joints = fa.get_joints()
+        new_joints[6] = math.radians(45-rz)
+        fa.goto_joints(new_joints, duration=9)
+
+    fa.goto_pose(pose, duration=5)
     fa.goto_gripper(d, force=60.0)
     time.sleep(3)
     return intermediate_pose
@@ -113,7 +134,7 @@ def sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_schedul
     return naction, end - start
 
 
-def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check):
+def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check):
     '''
     '''
     # define diffusion parameters
@@ -140,8 +161,13 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
         a_mins7d = np.array([-0.15, -0.15, -0.05, -90, 0.005])
         a_maxs7d = np.array([0.15, 0.15, 0.05, 90, 0.05])
     else:
-        a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
-        a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
+        # a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
+        # a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
+        a_mins7d = np.load(ckpt_dir + '/action_mins.npy')
+        a_maxs7d = np.load(ckpt_dir + '/action_maxs.npy')
+
+
+    global_pcl_center = np.array([0.630, -0.0054, 0.074])
 
     qpos = np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04])
     qpos = (qpos - a_mins7d) / (a_maxs7d - a_mins7d)
@@ -169,10 +195,14 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     raw_goal = np.load(goal_path)
 
     # define observation pose
-    pose = fa.get_pose()
-    observation_pose = np.array([0.6, 0, 0.325])
-    pose.translation = observation_pose
-    fa.goto_pose(pose)
+    observation_pose = fa.get_pose()
+    observation_translation = np.array([0.625, 0, 0.325]) # np.array([0.6, 0, 0.325])
+    observation_pose.translation = observation_translation
+    fa.goto_pose(observation_pose)
+
+    # define initial joint rotation
+    joints = fa.get_joints()
+    ee_joint_pos = joints[6]
     
     # initialize the n_actions counter
     n_action = 0
@@ -181,30 +211,38 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     planning_time_list = []
 
     # get the observation state
+    rgb1, _, pc1, _ = cam1._get_next_frame()
     rgb2, _, pc2, _ = cam2._get_next_frame()
     rgb3, _, pc3, _ = cam3._get_next_frame()
     rgb4, _, pc4, _ = cam4._get_next_frame()
     rgb5, _, pc5, _ = cam5._get_next_frame()
 
-    unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
+    # for 5x cameras, we need to get the ee pose
+    cur_pose = fa.get_pose()
+    translation = cur_pose.translation
+    rotation = cur_pose.rotation
+    _, _, _, _, _, unnorm_pcl, ctr = pcl_vis.crop_point_clouds_separately(pc1, pc2, pc3, pc4, pc5, color="Orange", ee_pos=translation, ee_rot=rotation, icp=True)
+                
     # center and scale pointcloud
-    pointcloud = (unnorm_pcl.copy() - ctr) * 10
+    # pointcloud = (np.copy(unnorm_pcl) - ctr) * 10
+    pointcloud = (np.copy(unnorm_pcl) - global_pcl_center) * 10
 
     # save the point clouds from each camera
+    o3d.io.write_point_cloud(save_path + '/cam1_pcl0.ply', pc1)
     o3d.io.write_point_cloud(save_path + '/cam2_pcl0.ply', pc2)
     o3d.io.write_point_cloud(save_path + '/cam3_pcl0.ply', pc3)
     o3d.io.write_point_cloud(save_path + '/cam4_pcl0.ply', pc4)
     o3d.io.write_point_cloud(save_path + '/cam5_pcl0.ply', pc5)
 
     # center the goal based on the goal center
-    numpy_goal = (raw_goal.copy() - ctr) * 10.0
+    numpy_goal = (np.copy(raw_goal) - global_pcl_center) * 10
     # scale distance metric goal differently 
-    dist_goal = numpy_goal.copy()
+    dist_goal = np.copy(numpy_goal)
 
     # visualize observation vs goal cloud
     pcl = o3d.geometry.PointCloud()
-    pcl.points = o3d.utility.Vector3dVector(unnorm_pcl)
-    pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(unnorm_pcl),1)))
+    pcl.points = o3d.utility.Vector3dVector(pointcloud)
+    pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
     goal_pcl = o3d.geometry.PointCloud()
     goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
     goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
@@ -212,10 +250,14 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
     # save observation
     np.save(save_path + '/pcl0.npy', pointcloud)
     np.save(save_path + '/center0.npy', ctr)
+    cv2.imwrite(save_path + '/rgb1_state0.jpg', rgb1)
     cv2.imwrite(save_path + '/rgb2_state0.jpg', rgb2)
     cv2.imwrite(save_path + '/rgb3_state0.jpg', rgb3)
     cv2.imwrite(save_path + '/rgb4_state0.jpg', rgb4)
     cv2.imwrite(save_path + '/rgb5_state0.jpg', rgb5)
+
+    print("\nMax unnorm pcl: ", np.max(unnorm_pcl, axis=0))
+    print("\nMax raw goal: ", np.max(raw_goal, axis=0))
 
     # get the distance metrics between the point cloud and goal
     dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goal),
@@ -223,6 +265,15 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
                     'HAUSDORFF': hausdorff(unnorm_pcl, raw_goal)}
 
     print("\nDists: ", dist_metrics)
+
+    # calculate the dist metrics if the pcls are centered
+    ctr_pcl = unnorm_pcl.copy() - np.mean(unnorm_pcl, axis=0)
+    ctr_goal = raw_goal.copy() - np.mean(raw_goal, axis=0)
+    centered_dists = {'CD': chamfer(ctr_pcl, ctr_goal),
+                    'EMD': emd(ctr_pcl, ctr_goal),
+                    'HAUSDORFF': hausdorff(ctr_pcl, ctr_goal)}
+    print("\nCentered Dists: ", centered_dists)
+
     with open(save_path + '/dist_metrics_0.txt', 'w') as f:
         f.write(str(dist_metrics))
 
@@ -270,7 +321,24 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             # update nagent_pos to be the new position
             nagent_pos = torch.from_numpy(pred_action[j]).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
             
-            # assert False
+            # check if rotations outside of executable bounds
+            # first check rz to wrap within expected range
+            if unnorm_a[5] > 225:
+                print("Rz too large, wrapping")
+                unnorm_a[5] = -(360 - unnorm_a[5])
+            # check if in the unexecutable zone
+            if unnorm_a[5] < -120 and unnorm_a[5] >= -135:
+                print("Rz in unexecutable zone, clipping")
+                unnorm_a[5] = -117
+            # check if need to wrap angles for unexecutable zone
+            elif unnorm_a[5] < -120:
+                print("Rz too small, wrapping")
+                unnorm_a[5] = 180 + 180 - np.abs(unnorm_a[5])
+            # check if need to wrap angles for unexecutable zone
+            elif unnorm_a[5] > 210:
+                print("Rz in unexecutable zone, clipping")
+                unnorm_a[5] = 207
+
             intermediate_pose = goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], unnorm_a[3], unnorm_a[4], unnorm_a[5], unnorm_a[6])
             n_action+=1
 
@@ -281,36 +349,53 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             fa.goto_gripper(0.04, block=True)
 
             # move to intermediate_pose
-            fa.goto_pose(intermediate_pose)
+            fa.goto_pose(intermediate_pose, duration=7)
 
-            # move to observation pose
-            pose.translation = observation_pose
-            fa.goto_pose(pose)
+
+            # ------- added scrips from data collection to ensure ee rotation -----
+            intermediate_pose.translation = observation_pose.translation
+            fa.goto_pose(intermediate_pose, duration=7)
+            # unrotate the end-effector
+            cur_joints = fa.get_joints()
+            cur_joints[6] = ee_joint_pos
+            fa.goto_joints(cur_joints, duration=7)
+            fa.goto_joints(joints, duration=6)
+            # goto overehad pose
+            fa.goto_pose(observation_pose)
 
             # get the observation state
+            rgb1, _, pc1, _ = cam1._get_next_frame()
             rgb2, _, pc2, _ = cam2._get_next_frame()
             rgb3, _, pc3, _ = cam3._get_next_frame()
             rgb4, _, pc4, _ = cam4._get_next_frame()
             rgb5, _, pc5, _ = cam5._get_next_frame()
-            unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
+            
+            # for 5x cameras, we need to get the ee pose
+            cur_pose = fa.get_pose()
+            translation = cur_pose.translation
+            rotation = cur_pose.rotation
+            _, _, _, _, _, unnorm_pcl, ctr = pcl_vis.crop_point_clouds_separately(pc1, pc2, pc3, pc4, pc5, color="Orange", ee_pos=translation, ee_rot=rotation, icp=True)
+            
             # center and scale pointcloud
-            pointcloud = (unnorm_pcl.copy() - ctr) * 10
+            # pointcloud = (np.copy(unnorm_pcl) - ctr) * 10
+            pointcloud = (np.copy(unnorm_pcl) - global_pcl_center) * 10
 
             # save the point clouds from each camera
+            o3d.io.write_point_cloud(save_path + '/cam1_pcl' + str(iter) + '.ply', pc1)
             o3d.io.write_point_cloud(save_path + '/cam2_pcl' + str(iter) + '.ply', pc2)
             o3d.io.write_point_cloud(save_path + '/cam3_pcl' + str(iter) + '.ply', pc3)
             o3d.io.write_point_cloud(save_path + '/cam4_pcl' + str(iter) + '.ply', pc4)
             o3d.io.write_point_cloud(save_path + '/cam5_pcl' + str(iter) + '.ply', pc5)
 
             # center the goal based on the point cloud center
-            numpy_goal = (raw_goal.copy() - ctr) * 10.0
+            numpy_goal = (np.copy(raw_goal) - global_pcl_center) * 10.0
             # scale distance metric goal differently 
-            dist_goal = numpy_goal.copy()
+            dist_goal = np.copy(numpy_goal)
 
             # visualize observation vs goal cloud
             pcl = o3d.geometry.PointCloud()
-            pcl.points = o3d.utility.Vector3dVector(unnorm_pcl)
-            pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(unnorm_pcl),1)))
+            pcl.points = o3d.utility.Vector3dVector(pointcloud)
+            pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
             goal_pcl = o3d.geometry.PointCloud()
             goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
             goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
@@ -319,6 +404,7 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             # save observation
             np.save(save_path + '/pcl' + str(iter) + '.npy', pointcloud)
             np.save(save_path + '/center' + str(iter) + '.npy', ctr)
+            cv2.imwrite(save_path + '/rgb1_state' + str(iter) + '.jpg', rgb1)
             cv2.imwrite(save_path + '/rgb2_state' + str(iter) + '.jpg', rgb2)
             cv2.imwrite(save_path + '/rgb3_state' + str(iter) + '.jpg', rgb3)
             cv2.imwrite(save_path + '/rgb4_state' + str(iter) + '.jpg', rgb4)
@@ -332,6 +418,14 @@ def experiment_loop(fa, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ck
             print("\nDists: ", dist_metrics)
             with open(save_path + '/dist_metrics_' + str(iter) + '.txt', 'w') as f:
                 f.write(str(dist_metrics))
+
+            # calculate the dist metrics if the pcls are centered
+            ctr_pcl = unnorm_pcl.copy() - np.mean(unnorm_pcl, axis=0)
+            ctr_goal = raw_goal.copy() - np.mean(raw_goal, axis=0)
+            centered_dists = {'CD': chamfer(ctr_pcl, ctr_goal),
+                            'EMD': emd(ctr_pcl, ctr_goal),
+                            'HAUSDORFF': hausdorff(ctr_pcl, ctr_goal)}
+            print("\nCentered Dists: ", centered_dists)
             
             # if that action was predicted to be the final action, then terminate the experiment
             if terminate > 0:
@@ -427,6 +521,7 @@ if __name__ == '__main__':
     fa.goto_gripper(0.04)
 
     # initialize the cameras
+    cam1 = vis.CameraClass(1)
     cam2 = vis.CameraClass(2)
     cam3 = vis.CameraClass(3)
     cam4 = vis.CameraClass(4)
@@ -447,7 +542,7 @@ if __name__ == '__main__':
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, video_save_path, done_queue))
 
     main_thread.start()

@@ -187,8 +187,11 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
         # a_mins7d = np.array([0.2188, -0.1150, 0.1272, -360, -50, -120, 0.008])
         # a_maxs7d = np.array([0.7376, 0.1007, 0.1600, 360, 50, 240, 0.016])
 
-        a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
-        a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
+        # a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
+        # a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
+
+        a_mins7d = np.load(ckpt_dir + '/action_mins.npy')
+        a_maxs7d = np.load(ckpt_dir + '/action_maxs.npy')
 
     
     global_pcl_center = np.array([0.630, -0.0054, 0.074])
