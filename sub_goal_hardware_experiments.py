@@ -327,7 +327,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             with open(save_path + '/dist_metrics_0.txt', 'w') as f:
                 f.write(str(dist_metrics))
 
-        naction, total_time = subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, raw_goals, ctr, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device, discounted)
+        naction, total_time = subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, raw_goals, global_pcl_center, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device, discounted)
         og_nagent_pos = nagent_pos.detach().clone()
         og_pointcloud = pointcloud.copy()
         planning_time_list.append(total_time)
@@ -354,7 +354,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
                 while collision and n_checks < 10:
                     n_checks += 1
                     print("\nCollision detected, replanning...")
-                    naction, total_time = subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, og_pointcloud, raw_goals, ctr, og_nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device, discounted)
+                    naction, total_time = subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, og_pointcloud, raw_goals, global_pcl_center, og_nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device, discounted)
                     pred_action = naction[0]
                     termination_pred = pred_action[:,7]
                     action_pred = (pred_action[:,0:7] + 1.0) / 2.0
@@ -518,11 +518,11 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 10
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_long_epochs_discounted_16pred_4step_7datasetfixed_with_augs' 
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_new_data_16_pred_june30_updated_augs' 
     centered_action = False
     sub_goal_step = 4
     pred_horizon = 16
-    collision_check = True
+    collision_check = False
     discounted = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -554,9 +554,9 @@ if __name__ == '__main__':
         f.write(str(exp_dict))
 
     # TODO: load in the list of autoregressively generated sub-goals
-    sub_goal_load_path = '/home/alison/Documents/GitHub/SculptDiff/subgoals/step' + str(sub_goal_step) + '/'
+    sub_goal_load_path = '/home/alison/Documents/GitHub/SculptDiff/subgoals/train/step' + str(sub_goal_step) + '/'
     # sub_goal_name = 'autoregressive_subgoal'
-    sub_goal_name = 'gt_subgoal'
+    sub_goal_name = 'unnormalized_pointcloud' # 'gt_subgoal'
     sub_goal_list = []
     i = 0
     while os.path.exists(sub_goal_load_path + sub_goal_name + str(i) + '.npy'):

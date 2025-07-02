@@ -185,6 +185,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
 
 
     qpos = np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04])
+    prev_action = qpos.copy()
     qpos = (qpos - a_mins7d) / (a_maxs7d - a_mins7d)
     qpos = qpos * 2.0 - 1.0
     qpos = np.concatenate((qpos, np.array([-1.])), axis=0)
@@ -314,7 +315,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
 
         # here would be where an mse check on the previous actions would be interesting!
         last_pred_action = action_pred[pred_horizon]
-        gt_last_action = (og_nagent_pos[0] + 1.0) / 2.0 * (a_maxs7d - a_mins7d) + a_mins7d
+        gt_last_action = prev_action
         # get the mse between the last predicted action and the ground truth last action
         mse_last_action = np.mean((last_pred_action - gt_last_action) ** 2)
         print("\nMSE between last predicted action and ground truth last action: ", mse_last_action)
@@ -366,6 +367,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
                 print("Rz in unexecutable zone, clipping")
                 unnorm_a[5] = 207
 
+            prev_action = unnorm_a
             intermediate_pose = goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], unnorm_a[3], unnorm_a[4], unnorm_a[5], unnorm_a[6])
             n_action+=1
 
@@ -507,7 +509,7 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/insert'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/forward_backward_new_data_16_pred_june30_updated_augs'
     goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy' # '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 8 

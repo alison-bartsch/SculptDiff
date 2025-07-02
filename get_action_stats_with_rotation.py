@@ -23,6 +23,12 @@ def fix_real_action(action7d):
     # check if need to wrap angles for unexecutable zone
     elif action7d[5] > 210:
         action7d[5] = 207
+
+    if action7d[3] < -45:
+        action7d[3] = 360 + action7d[3]
+    elif action7d[3] > 45:
+        action7d[3] = action7d[3] - 360
+
     return action7d
 
 def rotate_action(action, center, rot):
@@ -70,16 +76,14 @@ action_maxs = np.ones(7) * -1000
 for i in tqdm(range(20)):
     j = 1
     r_idx = 0
-    traj_path = '/home/alison/Documents/June18_Human_Demos_Train/Trajectory' + str(i)
+    # traj_path = '/home/alison/Documents/June18_Human_Demos_Train/Trajectory' + str(i)
+    traj_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory' + str(i)
 
     while os.path.exists(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy'):  
         # load unnormalized action
         action7d = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
         # print("\nAction before fix: ", action7d)
         action7d = fix_real_action(action7d)
-
-        if action7d[3] > 0:
-            print("\n\n\n\nRx positive: ", action7d[3])
 
         # check if each action elem is less than action_mins
         action_mins = np.minimum(action_mins, action7d)
