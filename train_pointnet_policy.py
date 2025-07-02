@@ -12,7 +12,7 @@ import numpy as np
 import torch
 
 # exp name
-exp_name = 'pointnet_new_data_16_pred' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
+exp_name = 'pointnet_new_data_16_pred_june30_updated_augs' # 'pottery_12pred_7datasetfixed_with_augs' #'subgoal_horizon_5_test_global_center' # 'pottery_20pred_with_augs'
 ckpt_dir = 'checkpoints/' + exp_name
 # if ckpt_dir does not exist, create it
 if not os.path.exists(ckpt_dir):
@@ -35,10 +35,10 @@ latent_dim = 512
 projection_head = EncoderHead(encoded_dim, latent_dim, is_pointBERT=False).to(device)
 
 # define the dataloader
-n_datapoints = 7200 # 2520 # 2*2*1800 # the desired numer of datapoints after augmentation
+n_datapoints = 3600 # 2520 # 2*2*1800 # the desired numer of datapoints after augmentation
 n_raw_trajectories = 20 #7 # the number of raw datapoints
 pred_horizon = 16 # 12 # 8 # 20
-num_epochs = 1000
+num_epochs = 1500
 target_shape = "pottery" # ["Line", "X", "Cone", or "All_Shapes"] # TODO: select what shape target you are training for
 dataset_path = '/home/alison/Documents/June18_Human_Demos_Train' # '/home/alison/Documents/Mar24_Bowl_Demos_Soft_Finger/pottery'
 # test_dataset_path = "ClayDemoDataset/" + str(target_shape) + "/Test" 
@@ -54,6 +54,11 @@ dataloader = torch.utils.data.DataLoader(
     pin_memory=True,
     # don't kill worker process after each epoch
     persistent_workers=True)
+
+min, max = dataset.get_action_min_max()
+# save the min and max action values 
+np.save(join(ckpt_dir, '/action_mins.npy'), min)
+np.save(join(ckpt_dir, '/action_maxs.npy'), max)
 
 # save experiment parameters as a dictionary
 exp_params = {'exp_name': exp_name,

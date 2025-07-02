@@ -32,6 +32,9 @@ class ClayDataset(torch.utils.data.Dataset):
         self.ee_center = np.array([0.608, 0.014, 0.125])
         self.pcl_center = np.array([0.630, -0.0054, 0.074])
 
+        self.a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
+        self.a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
+
         # determine the number of datapoints per trajectory - needs to be a round number
         self.n_datapoints_per_trajectory = self.n_datapoints / self.n_raw_trajectories
         if not self.n_datapoints_per_trajectory.is_integer():
@@ -39,6 +42,9 @@ class ClayDataset(torch.utils.data.Dataset):
 
         # deterime the augmentation interval
         self.aug_step = 360 / self.n_datapoints_per_trajectory
+
+    def get_dataset_min_max_stats(self):
+        return self.a_mins7d, self.a_maxs7d
 
     def _center_pcl(self, pcl, center):
         centered_pcl = pcl - center
@@ -80,11 +86,7 @@ class ClayDataset(torch.utils.data.Dataset):
         # a_mins7d = np.array([0.2188, -0.1150, 0.1272, -360, -50, -120, 0.008])
         # a_maxs7d = np.array([0.7376, 0.1007, 0.1600, 360, 50, 240, 0.016])
 
-
-        a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
-        a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
-
-        norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
+        norm_action = (action - self.a_mins7d) / (self.a_maxs7d - self.a_mins7d)
         norm_action = norm_action  * 2 - 1 # set to [-1, 1]
         return norm_action
     
@@ -345,6 +347,9 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         self.ee_center = np.array([0.608, 0.014, 0.125])
         self.pcl_center = np.array([0.630, -0.0054, 0.074])
 
+        self.a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
+        self.a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
+
         # determine the number of datapoints per trajectory - needs to be a round number
         self.n_datapoints_per_trajectory = self.n_datapoints / self.n_raw_trajectories
         if not self.n_datapoints_per_trajectory.is_integer():
@@ -352,6 +357,9 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
 
         # deterime the augmentation interval
         self.aug_step = 360 / self.n_datapoints_per_trajectory
+
+    def get_dataset_min_max_stats(self):
+        return self.a_mins7d, self.a_maxs7d
 
     def _center_pcl(self, pcl, center):
         centered_pcl = pcl - center
@@ -389,11 +397,11 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         # a_maxs7d = np.array([0.6749, 0.0871, 0.1600, 360, 10.10, 180, 0.016])
 
 
-        a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
-        a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
+        # a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
+        # a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
         
 
-        norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
+        norm_action = (action - self.a_mins7d) / (self.a_maxs7d - self.a_mins7d)
         norm_action = norm_action  * 2 - 1 # set to [-1, 1]
         return norm_action
     
@@ -636,6 +644,9 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
         self.ee_center = np.array([0.608, 0.014, 0.125])
         self.pcl_center = np.array([0.630, -0.0054, 0.074])
 
+        self.a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
+        self.a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
+
         # determine the number of datapoints per trajectory - needs to be a round number
         self.n_datapoints_per_trajectory = self.n_datapoints / self.n_raw_trajectories
         if not self.n_datapoints_per_trajectory.is_integer():
@@ -643,6 +654,9 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
 
         # deterime the augmentation interval
         self.aug_step = 360 / self.n_datapoints_per_trajectory
+        
+    def get_dataset_min_max_stats(self):
+        return self.a_mins7d, self.a_maxs7d
 
     def _center_pcl(self, pcl, center):
         centered_pcl = pcl - center
@@ -681,10 +695,10 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
 
 
 
-        a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
-        a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
+        # a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
+        # a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
 
-        norm_action = (action - a_mins7d) / (a_maxs7d - a_mins7d)
+        norm_action = (action - self.a_mins7d) / (self.a_maxs7d - self.a_mins7d)
         norm_action = norm_action  * 2 - 1 # set to [-1, 1]
         return norm_action
     
