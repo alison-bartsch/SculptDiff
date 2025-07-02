@@ -76,8 +76,8 @@ action_maxs = np.ones(7) * -1000
 for i in tqdm(range(20)):
     j = 1
     r_idx = 0
-    # traj_path = '/home/alison/Documents/June18_Human_Demos_Train/Trajectory' + str(i)
-    traj_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory' + str(i)
+    traj_path = '/home/alison/Documents/June18_Human_Demos_Train/Trajectory' + str(i)
+    # traj_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory' + str(i)
 
     while os.path.exists(traj_path + '/unnormalized_pointcloud' + str(j) + '.npy'):  
         # load unnormalized action
@@ -92,7 +92,7 @@ for i in tqdm(range(20)):
 
         # load in the center
         # ctr = np.load(traj_path + '/pcl_center' + str(j-1) + '.npy')
-        ctr = np.array([0.608, 0.014, 0.125])
+        ctr = np.array([0.608, 0.014, 0.125]) 
 
         for k in range(360):
             rotated_action = rotate_action(action7d, ctr, k)

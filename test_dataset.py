@@ -32,8 +32,11 @@ class ClayDataset(torch.utils.data.Dataset):
         self.ee_center = np.array([0.608, 0.014, 0.125])
         self.pcl_center = np.array([0.630, -0.0054, 0.074])
 
-        self.a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
-        self.a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
+        # self.a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
+        # self.a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
+
+        self.a_mins7d = np.array([0.52776, -0.0662, 0.1272, -3.484, -10.10, -117, 0.008])
+        self.a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 49.3, 11.68, 207, 0.016])
 
         # determine the number of datapoints per trajectory - needs to be a round number
         self.n_datapoints_per_trajectory = self.n_datapoints / self.n_raw_trajectories
@@ -182,12 +185,23 @@ class ClayDataset(torch.utils.data.Dataset):
     #     return action7d
 
     def _fix_real_action(self, action7d):
+        if action7d[5] > 225:
+            action7d[5] = -(360 - action7d[5])
+        # check if in the unexecutable zone
+        if action7d[5] < -117 and action7d[5] >= -135:
+            action7d[5] = -117
+        # check if need to wrap angles for unexecutable zone
         if action7d[5] < -120:
             action7d[5] = 180 + 180 - np.abs(action7d[5])
-            return action7d
+        # check if need to wrap angles for unexecutable zone
+        if action7d[5] > 207:
+            action7d[5] = 207
 
-        else:
-            return action7d
+        if action7d[3] < -45:
+            action7d[3] = 360 + action7d[3]
+        elif action7d[3] > 45:
+            action7d[3] = action7d[3] - 360
+        return action7d
 
     def _rotate_action(self, action, center, rot):
         # given the center and rot about z in degrees, create the transform to for the points action[0:2]
@@ -217,15 +231,15 @@ class ClayDataset(torch.utils.data.Dataset):
         if action_aug[5] > 225:
             action_aug[5] = -(360 - action_aug[5])
         # check if in the unexecutable zone
-        if action_aug[5] < -120 and action_aug[5] >= -135:
-            action_aug[5] = -119
+        if action_aug[5] < -117 and action_aug[5] >= -135:
+            action_aug[5] = -117
         # check if need to wrap angles for unexecutable zone
-        elif action_aug[5] < -120:
+        if action_aug[5] < -120:
             action_aug[5] = 180 + 180 - np.abs(action_aug[5])
             # action_aug[4] = -action_aug[4]
         # check if need to wrap angles for unexecutable zone
-        elif action_aug[5] > 210:
-            action_aug[5] = 209
+        if action_aug[5] > 207:
+            action_aug[5] = 207
             
         return action_aug
     
@@ -347,8 +361,8 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         self.ee_center = np.array([0.608, 0.014, 0.125])
         self.pcl_center = np.array([0.630, -0.0054, 0.074])
 
-        self.a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
-        self.a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
+        self.a_mins7d = np.array([0.52776, -0.0662, 0.1272, -3.484, -10.10, -117, 0.008])
+        self.a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 49.3, 11.68, 207, 0.016])
 
         # determine the number of datapoints per trajectory - needs to be a round number
         self.n_datapoints_per_trajectory = self.n_datapoints / self.n_raw_trajectories
@@ -443,17 +457,15 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         if action_aug[5] > 225:
             action_aug[5] = -(360 - action_aug[5])
         # check if in the unexecutable zone
-        if action_aug[5] < -120 and action_aug[5] >= -135:
-            action_aug[5] = -119
+        if action_aug[5] < -117 and action_aug[5] >= -135:
+            action_aug[5] = -117
         # check if need to wrap angles for unexecutable zone
-        elif action_aug[5] < -120:
+        if action_aug[5] < -120:
             action_aug[5] = 180 + 180 - np.abs(action_aug[5])
             # action_aug[4] = -action_aug[4]
         # check if need to wrap angles for unexecutable zone
-        elif action_aug[5] > 210:
-            action_aug[5] = 209
-            
-        return action_aug
+        if action_aug[5] > 207:
+            action_aug[5] = 207
     
     
     # def _rotate_action(self, action, center, rot):
@@ -492,12 +504,23 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         return wrapped_rz
 
     def _fix_real_action(self, action7d):
+        if action7d[5] > 225:
+            action7d[5] = -(360 - action7d[5])
+        # check if in the unexecutable zone
+        if action7d[5] < -117 and action7d[5] >= -135:
+            action7d[5] = -117
+        # check if need to wrap angles for unexecutable zone
         if action7d[5] < -120:
             action7d[5] = 180 + 180 - np.abs(action7d[5])
-            return action7d
+        # check if need to wrap angles for unexecutable zone
+        if action7d[5] > 207:
+            action7d[5] = 207
 
-        else:
-            return action7d
+        if action7d[3] < -45:
+            action7d[3] = 360 + action7d[3]
+        elif action7d[3] > 45:
+            action7d[3] = action7d[3] - 360
+        return action7d
     
     def __len__(self):
         """
@@ -644,8 +667,8 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
         self.ee_center = np.array([0.608, 0.014, 0.125])
         self.pcl_center = np.array([0.630, -0.0054, 0.074])
 
-        self.a_mins7d = np.array([0.52776, -0.0662, 0.1272, -360, -10.10, -120, 0.008])
-        self.a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 360, 11.68, 240, 0.016])
+        self.a_mins7d = np.array([0.52776, -0.0662, 0.1272, -3.484, -10.10, -117, 0.008])
+        self.a_maxs7d = np.array([0.68825, 0.09425, 0.1600, 49.3, 11.68, 207, 0.016])
 
         # determine the number of datapoints per trajectory - needs to be a round number
         self.n_datapoints_per_trajectory = self.n_datapoints / self.n_raw_trajectories
@@ -770,15 +793,15 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
         if action_aug[5] > 225:
             action_aug[5] = -(360 - action_aug[5])
         # check if in the unexecutable zone
-        if action_aug[5] < -120 and action_aug[5] >= -135:
-            action_aug[5] = -119
+        if action_aug[5] < -117 and action_aug[5] >= -135:
+            action_aug[5] = -117
         # check if need to wrap angles for unexecutable zone
-        elif action_aug[5] < -120:
+        if action_aug[5] < -120:
             action_aug[5] = 180 + 180 - np.abs(action_aug[5])
             # action_aug[4] = -action_aug[4]
         # check if need to wrap angles for unexecutable zone
-        elif action_aug[5] > 210:
-            action_aug[5] = 209
+        if action_aug[5] > 207:
+            action_aug[5] = 207
             
         return action_aug
     
@@ -788,12 +811,23 @@ class SubGoalClayDataset(torch.utils.data.Dataset):
         return wrapped_rz
 
     def _fix_real_action(self, action7d):
+        if action7d[5] > 225:
+            action7d[5] = -(360 - action7d[5])
+        # check if in the unexecutable zone
+        if action7d[5] < -117 and action7d[5] >= -135:
+            action7d[5] = -117
+        # check if need to wrap angles for unexecutable zone
         if action7d[5] < -120:
             action7d[5] = 180 + 180 - np.abs(action7d[5])
-            return action7d
+        # check if need to wrap angles for unexecutable zone
+        if action7d[5] > 207:
+            action7d[5] = 207
 
-        else:
-            return action7d
+        if action7d[3] < -45:
+            action7d[3] = 360 + action7d[3]
+        elif action7d[3] > 45:
+            action7d[3] = action7d[3] - 360
+        return action7d
     
     def __len__(self):
         """
