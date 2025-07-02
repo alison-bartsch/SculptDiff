@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 from pointBERT.tools import builder
 from pointBERT.utils.config import cfg_from_yaml_file
 from embeddings import EncoderHead
-from test_dataset import ClayDataset, SubGoalClayDataset, ClayDatasetForwardBackward
+from test_dataset import ClayDataset, SubGoalClayDataset, ClayDatasetForwardBackward, ClayDatasetContinualGuidance
 from os.path import join
 import os
 import numpy as np
@@ -31,9 +31,11 @@ def train_diffusion_policy(ckpt_dir, training_params):
         if training_params['embedding'] == 'pointbert':
             encoder = None
             pass # initialize pointbert encoder from scratch
+        
         elif training_params['embedding'] == 'pointnet':
             encoder = None
             pass # initialize pointnet encoder from scratch
+        
         else:
             raise ValueError("Invalid embedding type. Choose 'pointbert' or 'pointnet'.")
 
@@ -53,11 +55,13 @@ def train_diffusion_policy(ckpt_dir, training_params):
     discount_factor = 0.9 # if 1.0 then no discounting
 
     if training_params['subgoal']:
-        dataset = SubGoalClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions, subgoal_stepsize=4, global_centering=training_params['global_centering'])
+        dataset = SubGoalClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions, subgoal_stepsize=4)
     elif training_params['forward_backward']:
-        dataset = ClayDatasetForwardBackward(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions, global_centering=training_params['global_centering'])
+        dataset = ClayDatasetForwardBackward(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
+    elif training_params['continual_guidance']:
+        dataset = ClayDatasetContinualGuidance(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
     else:
-        dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions, global_centering=training_params['global_centering'])
+        dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
     
     dataloader = torch.utils.data.DataLoader(
         dataset,
@@ -243,16 +247,46 @@ def train_diffusion_policy(ckpt_dir, training_params):
 
 
 if __name__ == "__main__":
-    train_dict = {'pointbert_pretrained_global_centering' : {'embedding' : 'pointbert',
-                                                            'pretrained' : True,
-                                                            'global_centering' : True,
-                                                            'subgoal' : False,
-                                                            'forward_backward' : False},
-                'pointnet_pretrained_global_centering' : {'embedding' : 'pointnet',
-                                                            'pretrained' : True,
-                                                            'global_centering' : True,
-                                                            'subgoal' : False,
-                                                            'forward_backward' : False}}
+    train_dict = {'pointbert_pretrained_forward' : {'embedding' : 'pointbert',
+                                                    'pretrained' : True,
+                                                    'subgoal' : False,
+                                                    'forward_backward' : False,
+                                                    'continual_guidance' : False},
+                'pointbert_pretrained_subgoal' : {'embedding' : 'pointbert',
+                                                    'pretrained' : True,
+                                                    'subgoal' : True,
+                                                    'forward_backward' : False,
+                                                    'continual_guidance' : False},
+                'pointbert_pretrained_forward_backward' : {'embedding' : 'pointbert',
+                                                    'pretrained' : True,
+                                                    'subgoal' : False,
+                                                    'forward_backward' : True,
+                                                    'continual_guidance' : False},
+                'pointbert_pretrained_continual_guidance' : {'embedding' : 'pointbert',
+                                                    'pretrained' : True,
+                                                    'subgoal' : False,
+                                                    'forward_backward' : False,
+                                                    'continual_guidance' : True},
+                'pointnet_pretrained_forward' : {'embedding' : 'pointnet',
+                                                    'pretrained' : True,
+                                                    'subgoal' : False,
+                                                    'forward_backward' : False,
+                                                    'continual_guidance' : False},
+                'pointnet_pretrained_subgoal' : {'embedding' : 'pointnet',
+                                                    'pretrained' : True,
+                                                    'subgoal' : True,
+                                                    'forward_backward' : False,
+                                                    'continual_guidance' : False},
+                'pointnet_pretrained_forward_backward' : {'embedding' : 'pointnet',
+                                                    'pretrained' : True,
+                                                    'subgoal' : False,
+                                                    'forward_backward' : True,
+                                                    'continual_guidance' : False},
+                'pointnet_pretrained_continual_guidance' : {'embedding' : 'pointnet',
+                                                    'pretrained' : True,
+                                                    'subgoal' : False,
+                                                    'forward_backward' : False,
+                                                    'continual_guidance' : True},}
 
     for train_name, train_params in train_dict.items():
         ckpt_dir = 'checkpoints/' + train_name
