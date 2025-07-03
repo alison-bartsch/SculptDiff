@@ -26,6 +26,25 @@ class EncoderHead(nn.Module):
         latent_state = self.encoder_head(x)
         return latent_state
 
+
+class GoalMeasureHead(nn.Module):
+    def __init__(self, encoded_dim, latent_dim):
+        super(GoalMeasureHead, self).__init__()
+        self.encoded_dim = encoded_dim
+        self.latent_dim = latent_dim
+        
+        self.goal_measure_head = nn.Sequential(
+            nn.Linear(self.encoded_dim, 1024),
+            nn.GELU(),
+            nn.Linear(1024, self.latent_dim),
+            nn.GELU(),
+            nn.Linear(self.latent_dim, self.latent_dim)
+        )
+
+    def forward(self, x):
+        goal_latent_state = self.goal_measure_head(x)
+        return goal_latent_state
+
 # class EncoderHead(nn.Module):
 #     def __init__(self, encoded_dim, latent_dim):
 #         super(EncoderHead, self).__init__()
