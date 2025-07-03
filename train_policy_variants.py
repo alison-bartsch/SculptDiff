@@ -5,8 +5,9 @@ from diffusers.optimization import get_scheduler
 from tqdm.auto import tqdm
 from pointBERT.tools import builder
 from pointBERT.utils.config import cfg_from_yaml_file
-from embeddings import EncoderHead
-from test_dataset import ClayDataset, SubGoalClayDataset, ClayDatasetForwardBackward, ClayDatasetContinualGuidance
+from pointnet.models.model_dp3_pytorch import PointNetEncoderXYZ
+from embeddings import EncoderHead, GoalMeasureHead
+from test_dataset import ClayDataset, SubGoalClayDataset, ClayDatasetForwardBackward, ClayDatasetContinualGuidance, ClayDatasetGoalMeasure
 from os.path import join
 import os
 import numpy as np
@@ -17,27 +18,39 @@ def train_diffusion_policy(ckpt_dir, training_params):
     
     if training_params['pretrained'] == True:
         if training_params['embedding'] == 'pointbert':
-            encoder = None
-            pass # load in pointbert encoder
+            config = cfg_from_yaml_file('pointBERT/cfgs/PointTransformer.yaml')
+            model_config = config.model
+            encoder = builder.model_builder(model_config)
+            weights_path = 'pointBERT/point-BERT-weights/Point-BERT.pth'
+            encoder.load_model_from_ckpt(weights_path)
+            encoder.to(device)
 
         elif training_params['embedding'] == 'pointnet':
-            encoder = None
-            pass # load in pointnet encoder
+            encoder = PointNetEncoderXYZ().to(device)
+            checkpoint_path = "/home/alison/Documents/GitHub/SculptDiff/pointnet/weights/best_model_epoch_181.pth"
+            state_dict = torch.load(checkpoint_path, map_location=device)
+            # Load only the encoder weights
+            encoder.load_state_dict({k.replace('encoder.', ''): v for k, v in state_dict.items() if k.startswith('encoder.')})
 
         else:
             raise ValueError("Invalid embedding type. Choose 'pointbert' or 'pointnet'.")
 
     else:
         if training_params['embedding'] == 'pointbert':
-            encoder = None
-            pass # initialize pointbert encoder from scratch
+            config = cfg_from_yaml_file('pointBERT/cfgs/PointTransformer.yaml')
+            model_config = config.model
+            encoder = builder.model_builder(model_config)
+            encoder.to(device)
         
         elif training_params['embedding'] == 'pointnet':
-            encoder = None
-            pass # initialize pointnet encoder from scratch
+            encoder = PointNetEncoderXYZ().to(device)
         
         else:
             raise ValueError("Invalid embedding type. Choose 'pointbert' or 'pointnet'.")
+
+    if training_params['measure_goal'] == True:
+        # setup the goal measurement projection
+        goal_measure_encoder = GoalMeasureHead(1, 512).to(device)
 
     # setup the projection head
     encoded_dim = 768 
@@ -60,6 +73,8 @@ def train_diffusion_policy(ckpt_dir, training_params):
         dataset = ClayDatasetForwardBackward(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
     elif training_params['continual_guidance']:
         dataset = ClayDatasetContinualGuidance(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
+    elif training_params['measure_goal']:
+        dataset = ClayDatasetGoalMeasure(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
     else:
         dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
     
@@ -115,11 +130,19 @@ def train_diffusion_policy(ckpt_dir, training_params):
         global_cond_dim=obs_dim*obs_horizon
     ).to(device)
 
-    nets = nn.ModuleDict({
-        'encoder': encoder,
-        'projection_head': projection_head,
-        'noise_pred_net': noise_pred_net
-    })
+    if training_params['measure_goal'] == True:
+        nets = nn.ModuleDict({
+            'encoder': encoder,
+            'projection_head': projection_head,
+            'noise_pred_net': noise_pred_net,
+            'goal_measure_encoder': goal_measure_encoder
+            })
+    else:
+        nets = nn.ModuleDict({
+            'encoder': encoder,
+            'projection_head': projection_head,
+            'noise_pred_net': noise_pred_net
+        })
 
     # Exponential Moving Average
     ema = EMAModel(
@@ -147,36 +170,75 @@ def train_diffusion_policy(ckpt_dir, training_params):
             # batch loop
             with tqdm(dataloader, desc='Batch', leave=False) as tepoch:
                 for nbatch in tepoch:
-                    # print("point cloud shape: ", nbatch['pointcloud'].shape)
-                    pointcloud = nbatch['pointcloud'].to(device).float()
-                    goalcloud = nbatch['goal'].to(device).float()
-                    nagent_pos = nbatch['agent_pos'].to(device).unsqueeze(axis=1)
-                    naction = nbatch['action'].to(device)
-                    B = nagent_pos.shape[0]
+                    if training_params['subgoal']:
+                        nagent_pos = nbatch['agent_pos'].to(device).unsqueeze(axis=1)
+                        naction = nbatch['action'].to(device)
+                        B = nagent_pos.shape[0]
 
-                    # embed point cloud
-                    if training_params['embedding'] == 'pointbert':
-                        pointcloud_features = nets['encoder'](pointcloud)
-                        goalcloud_features = nets['encoder'](goalcloud)
+                        obs_features = [nagent_pos]
+                        for i in range(nbatch['pcl_seq'].shape[1]):
+                            pcl = nbatch['pcl_seq'][:, i, :, :].to(device).float()
 
-                    elif training_params['embedding'] == 'pointnet':
-                        pointcloud_features, _ = nets['encoder'](pointcloud)
-                        goalcloud_features = nets['encoder'](goalcloud)
+                            if training_params['embedding'] == 'pointbert':
+                                # embed point cloud using pointbert
+                                pcl_features = nets['encoder'](pcl)
+                                pcl_features = nets['projection_head'](pcl_features)
+                            
+                            elif training_params['embedding'] == 'pointnet':
+                                # embed point cloud using pointnet
+                                pcl_features, _ = nets['encoder'](pcl)
+                                pcl_features = nets['projection_head'](pcl_features)
+                            
+                            else:
+                                raise ValueError("Invalid embedding type. Choose 'pointbert' or 'pointnet'.")
 
+                            # weight the pcl features based on order
+                            pcl_features = discount_factor ** i * pcl_features
+                            pcl_features = pcl_features.unsqueeze(1).repeat(1, obs_horizon, 1)
+                            obs_features.append(pcl_features)
+                        obs_features = torch.cat(obs_features, dim=-1)
+                        
                     else:
-                        raise ValueError("Invalid embedding type. Choose 'pointbert' or 'pointnet'.")
-                    
-                    # pointcloud_features = nets['encoder'](pointcloud)
-                    pointcloud_features = nets['projection_head'](pointcloud_features)
+                        pointcloud = nbatch['pointcloud'].to(device).float()
+                        goalcloud = nbatch['goal'].to(device).float()
+                        nagent_pos = nbatch['agent_pos'].to(device).unsqueeze(axis=1)
+                        naction = nbatch['action'].to(device)
+                        B = nagent_pos.shape[0]
 
-                    # embed goal cloud
-                    # goalcloud_features = nets['encoder'](goalcloud)
-                    goalcloud_features = nets['projection_head'](goalcloud_features)
+                        # embed point cloud
+                        if training_params['embedding'] == 'pointbert':
+                            pointcloud_features = nets['encoder'](pointcloud)
 
-                    # stack pointcloud features for each obs horizon
-                    pointcloud_features = pointcloud_features.unsqueeze(1).repeat(1, obs_horizon, 1)
-                    goalcloud_features = goalcloud_features.unsqueeze(1).repeat(1, obs_horizon, 1)
-                    obs_features = torch.cat([pointcloud_features, nagent_pos, goalcloud_features],dim=-1)
+                            if training_params['measure_goal']:
+                                # embed goal cloud using goal measure encoder
+                                goalcloud_features = nets['goal_measure_encoder'](goalcloud)
+                            else:
+                                goalcloud_features = nets['encoder'](goalcloud)
+
+                        elif training_params['embedding'] == 'pointnet':
+                            pointcloud_features, _ = nets['encoder'](pointcloud)
+
+                            if training_params['measure_goal']:
+                                # embed goal cloud using goal measure encoder
+                                goalcloud_features, _ = nets['goal_measure_encoder'](goalcloud)
+                            else:
+                                goalcloud_features = nets['encoder'](goalcloud)
+
+                        else:
+                            raise ValueError("Invalid embedding type. Choose 'pointbert' or 'pointnet'.")
+                        
+                        # pointcloud_features = nets['encoder'](pointcloud)
+                        pointcloud_features = nets['projection_head'](pointcloud_features)
+
+                        # embed goal cloud
+                        # goalcloud_features = nets['encoder'](goalcloud)
+                        if training_params['measure_goal'] == False:
+                            goalcloud_features = nets['projection_head'](goalcloud_features)
+
+                        # stack pointcloud features for each obs horizon
+                        pointcloud_features = pointcloud_features.unsqueeze(1).repeat(1, obs_horizon, 1)
+                        goalcloud_features = goalcloud_features.unsqueeze(1).repeat(1, obs_horizon, 1)
+                        obs_features = torch.cat([pointcloud_features, nagent_pos, goalcloud_features],dim=-1)
 
                     # concatenate vision feature and low-dim obs
                     obs_cond = obs_features.flatten(start_dim=1)
@@ -228,6 +290,11 @@ def train_diffusion_policy(ckpt_dir, training_params):
                     elif training_params['embedding'] == 'pointnet':
                         pointnet_checkpoint = {'encoder': nets['encoder']}
                         torch.save(pointnet_checkpoint, join(ckpt_dir, 'pointnet_best_checkpoint.zip'))
+
+                    if training_params['measure_goal'] == True:
+                        # goal measure head
+                        checkpoint = {'goal_measure_encoder': nets['goal_measure_encoder']}
+                        torch.save(checkpoint, join(ckpt_dir, 'goal_measure_best_checkpoint'))
                     
                     # projection head
                     checkpoint = {'encoder_head': nets['projection_head']}
@@ -251,42 +318,56 @@ if __name__ == "__main__":
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : False,
-                                                    'continual_guidance' : False},
+                                                    'continual_guidance' : False,
+                                                    'measure_goal' : False},
+                'pointbert_pretrained_measured_goal' : {'embedding' : 'pointbert',
+                                                    'pretrained' : True,
+                                                    'subgoal' : False,
+                                                    'forward_backward' : False,
+                                                    'continual_guidance' : False,
+                                                    'measure_goal' : True},
                 'pointbert_pretrained_subgoal' : {'embedding' : 'pointbert',
                                                     'pretrained' : True,
                                                     'subgoal' : True,
                                                     'forward_backward' : False,
-                                                    'continual_guidance' : False},
+                                                    'continual_guidance' : False,
+                                                    'measure_goal' : False},
                 'pointbert_pretrained_forward_backward' : {'embedding' : 'pointbert',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : True,
-                                                    'continual_guidance' : False},
+                                                    'continual_guidance' : False,
+                                                    'measure_goal' : False},
                 'pointbert_pretrained_continual_guidance' : {'embedding' : 'pointbert',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : False,
-                                                    'continual_guidance' : True},
+                                                    'continual_guidance' : True,
+                                                    'measure_goal' : False},
                 'pointnet_pretrained_forward' : {'embedding' : 'pointnet',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : False,
-                                                    'continual_guidance' : False},
+                                                    'continual_guidance' : False,
+                                                    'measure_goal' : False},
                 'pointnet_pretrained_subgoal' : {'embedding' : 'pointnet',
                                                     'pretrained' : True,
                                                     'subgoal' : True,
                                                     'forward_backward' : False,
-                                                    'continual_guidance' : False},
+                                                    'continual_guidance' : False,
+                                                    'measure_goal' : False},
                 'pointnet_pretrained_forward_backward' : {'embedding' : 'pointnet',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : True,
-                                                    'continual_guidance' : False},
+                                                    'continual_guidance' : False,
+                                                    'measure_goal' : False},
                 'pointnet_pretrained_continual_guidance' : {'embedding' : 'pointnet',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : False,
-                                                    'continual_guidance' : True},}
+                                                    'continual_guidance' : True,
+                                                    'measure_goal' : False},}
 
     for train_name, train_params in train_dict.items():
         ckpt_dir = 'checkpoints/' + train_name
