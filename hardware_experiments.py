@@ -37,6 +37,26 @@ def calculate_intermediate_pose(final_pose, dist=0.055):
     return intermediate_pose
 
 
+def get_durations(rz):
+    if rz < -60:
+        rot_duration = 5
+        inpos_duration = 15
+        reset_duration = 9
+    elif rz > 190:
+        rot_duration = 7
+        inpos_duration = 15
+        reset_duration = 9
+    elif rz < 90:
+        rot_duration = 3
+        inpos_duration = 5
+        reset_duration = 4
+    else:
+        rot_duration = 5
+        inpos_duration = 7
+        reset_duration = 5
+    return rot_duration, inpos_duration, reset_duration
+
+
 def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     """
     Parameterize a grasp action by the position [x,y,z] Euler angle rotation [rx,ry,rz], and width [d] of the gripper.
@@ -44,6 +64,9 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
 
     :param fa:  franka robot class instantiation
     """
+    # dynamically decide durations
+    rot_duration, inpos_duration, reset_duration = get_durations(rz)
+
     # NOTE: this function cannot distinguish directional rotation goals for the wrist (i.e. rz)
     # first go to rz in the wrist joints
     local_joints = fa.get_joints()
@@ -54,7 +77,7 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
         local_joints[6] = math.radians(45-intermediate_rz)
     else:
         local_joints[6] = math.radians(45-rz)
-    fa.goto_joints(local_joints, duration=9)
+    fa.goto_joints(local_joints, duration=rot_duration)
     final_joints = fa.get_joints()
     print("Executed to joint angle: ", math.degrees(final_joints[6]))
 
@@ -82,14 +105,14 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
 
     # fa.goto_pose(intermediate_pose, duration=15) # NOTE: used to be duration=6
 
-    fa.goto_pose(intermediate_pose, duration=15) # NOTE: used to be duration=6
+    fa.goto_pose(intermediate_pose, duration=inpos_duration) # NOTE: used to be duration=6
 
     if rz < -105:
         new_joints = fa.get_joints()
         new_joints[6] = math.radians(45-rz)
         fa.goto_joints(new_joints, duration=9)
 
-    fa.goto_pose(pose, duration=5)
+    fa.goto_pose(pose, duration=reset_duration)
     fa.goto_gripper(d, force=60.0)
     time.sleep(3)
     return intermediate_pose
@@ -360,23 +383,33 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
                 print("Rz too large, wrapping")
                 unnorm_a[5] = -(360 - unnorm_a[5])
             # check if in the unexecutable zone
-            if unnorm_a[5] < -120 and unnorm_a[5] >= -135:
+            if unnorm_a[5] < -117 and unnorm_a[5] >= -135:
                 print("Rz in unexecutable zone, clipping")
                 unnorm_a[5] = -117
             # check if need to wrap angles for unexecutable zone
-            elif unnorm_a[5] < -120:
+            if unnorm_a[5] < -120:
                 print("Rz too small, wrapping")
                 unnorm_a[5] = 180 + 180 - np.abs(unnorm_a[5])
             # check if need to wrap angles for unexecutable zone
-            elif unnorm_a[5] > 210:
+            if unnorm_a[5] > 207:
                 print("Rz in unexecutable zone, clipping")
                 unnorm_a[5] = 207
+
+            if unnorm_a[3] < -45:
+                print("Rx too small")
+                unnorm_a[3] = 360 + unnorm_a[3]
+            elif unnorm_a[3] > 45:
+                print("Rx too big")
+                unnorm_a[3] = unnorm_a[3] - 360
 
             intermediate_pose = goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], unnorm_a[3], unnorm_a[4], unnorm_a[5], unnorm_a[6])
             n_action+=1
 
             # wait here
             time.sleep(3)
+
+            # get durations
+            rot_duration, inpos_duration, reset_duration = get_durations(unnorm_a[5])
 
             # open the gripper
             fa.goto_gripper(0.04, block=True)
@@ -387,12 +420,12 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
 
             # ------- added scrips from data collection to ensure ee rotation -----
             intermediate_pose.translation = observation_pose.translation
-            fa.goto_pose(intermediate_pose, duration=7)
+            fa.goto_pose(intermediate_pose, duration=reset_duration)
             # unrotate the end-effector
             cur_joints = fa.get_joints()
             cur_joints[6] = ee_joint_pos
-            fa.goto_joints(cur_joints, duration=7)
-            fa.goto_joints(joints, duration=6)
+            fa.goto_joints(cur_joints, duration=rot_duration)
+            fa.goto_joints(joints, duration=reset_duration)
             # goto overehad pose
             fa.goto_pose(observation_pose)
 
@@ -513,11 +546,11 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/new_data_16_pred_june30_updated_augs_no_augs' # new_data_16_pred_june30_updated_augs'
-    goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy' # Test/Trajectory1/unnormalized_pointcloud22.npy' # Train/Trajectory3/unnormalized_pointcloud28.npy' # '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointbert_pretrained_forward' # new_data_16_pred_june30_updated_augs'
+    goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy' # Test/Trajectory0/unnormalized_pointcloud23.npy'  # '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
-    execute_horizon = 16
+    execute_horizon = 4
     collision_check = False
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
