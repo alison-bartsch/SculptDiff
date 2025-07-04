@@ -15,6 +15,8 @@ import torch
 
 def train_diffusion_policy(ckpt_dir, training_params):
     device = torch.device('cuda')
+
+    print("\n\n\n\nModel: ", ckpt_dir)
     
     if training_params['pretrained'] == True:
         if training_params['embedding'] == 'pointbert':
@@ -53,22 +55,30 @@ def train_diffusion_policy(ckpt_dir, training_params):
         goal_measure_encoder = GoalMeasureHead(1, 512).to(device)
 
     # setup the projection head
-    encoded_dim = 768 
-    latent_dim = 512
-    projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
+    if training_params['embedding'] == 'pointbert':
+    # load in pointbert encoder from pretrained weights
+        encoded_dim = 768 
+        latent_dim = 512
+        projection_head = EncoderHead(encoded_dim, latent_dim).to(device)
+    elif training_params['embedding'] == 'pointnet':
+        # setup the projection head
+        encoded_dim = 1024
+        latent_dim = 512
+        projection_head = EncoderHead(encoded_dim, latent_dim, is_pointBERT=False).to(device)
 
     # define the dataloader
-    n_datapoints = 7200 
+    n_datapoints = 3600 
     n_raw_trajectories = 20 
     pred_horizon = 16 
-    num_epochs = 1000 
+    num_epochs = 1500 
     target_shape = "pottery" 
     dataset_path = '/home/alison/Documents/June18_Human_Demos_Train'
     center_actions = False
     discount_factor = 0.9 # if 1.0 then no discounting
+    subgoal_stepsize = 8
 
     if training_params['subgoal']:
-        dataset = SubGoalClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions, subgoal_stepsize=4)
+        dataset = SubGoalClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions, subgoal_stepsize=subgoal_stepsize)
     elif training_params['forward_backward']:
         dataset = ClayDatasetForwardBackward(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
     elif training_params['continual_guidance']:
@@ -76,7 +86,7 @@ def train_diffusion_policy(ckpt_dir, training_params):
     elif training_params['measure_goal']:
         dataset = ClayDatasetGoalMeasure(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
     else:
-        dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions)
+        dataset = ClayDataset(dataset_path, pred_horizon, n_datapoints, n_raw_trajectories, center_actions, training_params['rotate_goal'])
     
     dataloader = torch.utils.data.DataLoader(
         dataset,
@@ -120,7 +130,10 @@ def train_diffusion_policy(ckpt_dir, training_params):
     # define parameters
     pcl_feature_dim = 512
     lowdim_obs_dim = 8 
-    obs_dim = 2*pcl_feature_dim + lowdim_obs_dim
+    if training_params['subgoal']:
+        obs_dim = int((pred_horizon + subgoal_stepsize) / subgoal_stepsize)*pcl_feature_dim + lowdim_obs_dim
+    else:
+        obs_dim = 2*pcl_feature_dim + lowdim_obs_dim
     action_dim = 8
     obs_horizon = 1
 
@@ -220,9 +233,9 @@ def train_diffusion_policy(ckpt_dir, training_params):
 
                             if training_params['measure_goal']:
                                 # embed goal cloud using goal measure encoder
-                                goalcloud_features, _ = nets['goal_measure_encoder'](goalcloud)
+                                goalcloud_features = nets['goal_measure_encoder'](goalcloud)
                             else:
-                                goalcloud_features = nets['encoder'](goalcloud)
+                                goalcloud_features, _ = nets['encoder'](goalcloud)
 
                         else:
                             raise ValueError("Invalid embedding type. Choose 'pointbert' or 'pointnet'.")
@@ -314,60 +327,90 @@ def train_diffusion_policy(ckpt_dir, training_params):
 
 
 if __name__ == "__main__":
-    train_dict = {'pointbert_pretrained_forward' : {'embedding' : 'pointbert',
+    train_dict = {'pointbert_pretrained_measured_goal' : {'embedding' : 'pointbert',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : False,
                                                     'continual_guidance' : False,
-                                                    'measure_goal' : False},
-                'pointbert_pretrained_measured_goal' : {'embedding' : 'pointbert',
+                                                    'measure_goal' : True,
+                                                    'rotate_goal' : True},
+                'pointbert_pretrained_no_rotate_goal' : {'embedding' : 'pointbert',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : False,
                                                     'continual_guidance' : False,
-                                                    'measure_goal' : True},
+                                                    'measure_goal' : False,
+                                                    'rotate_goal' : False},
                 'pointbert_pretrained_subgoal' : {'embedding' : 'pointbert',
                                                     'pretrained' : True,
                                                     'subgoal' : True,
                                                     'forward_backward' : False,
                                                     'continual_guidance' : False,
-                                                    'measure_goal' : False},
+                                                    'measure_goal' : False,
+                                                    'rotate_goal' : True},
                 'pointbert_pretrained_forward_backward' : {'embedding' : 'pointbert',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : True,
                                                     'continual_guidance' : False,
-                                                    'measure_goal' : False},
+                                                    'measure_goal' : False,
+                                                    'rotate_goal' : True},
                 'pointbert_pretrained_continual_guidance' : {'embedding' : 'pointbert',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : False,
                                                     'continual_guidance' : True,
-                                                    'measure_goal' : False},
+                                                    'measure_goal' : False,
+                                                    'rotate_goal' : True},
                 'pointnet_pretrained_forward' : {'embedding' : 'pointnet',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : False,
                                                     'continual_guidance' : False,
-                                                    'measure_goal' : False},
+                                                    'measure_goal' : False,
+                                                    'rotate_goal' : True},
                 'pointnet_pretrained_subgoal' : {'embedding' : 'pointnet',
                                                     'pretrained' : True,
                                                     'subgoal' : True,
                                                     'forward_backward' : False,
                                                     'continual_guidance' : False,
-                                                    'measure_goal' : False},
+                                                    'measure_goal' : False,
+                                                    'rotate_goal' : True},
                 'pointnet_pretrained_forward_backward' : {'embedding' : 'pointnet',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : True,
                                                     'continual_guidance' : False,
-                                                    'measure_goal' : False},
+                                                    'measure_goal' : False,
+                                                    'rotate_goal' : True},
                 'pointnet_pretrained_continual_guidance' : {'embedding' : 'pointnet',
                                                     'pretrained' : True,
                                                     'subgoal' : False,
                                                     'forward_backward' : False,
                                                     'continual_guidance' : True,
-                                                    'measure_goal' : False},}
+                                                    'measure_goal' : False,
+                                                    'rotate_goal' : True},
+                'pointnet_pretrained_measured_goal' : {'embedding' : 'pointnet',
+                                                    'pretrained' : True,
+                                                    'subgoal' : False,
+                                                    'forward_backward' : False,
+                                                    'continual_guidance' : False,
+                                                    'measure_goal' : True,
+                                                    'rotate_goal' : True},
+                'pointbert_untrained_forward' : {'embedding' : 'pointbert',
+                                                    'pretrained' : False,
+                                                    'subgoal' : False,
+                                                    'forward_backward' : False,
+                                                    'continual_guidance' : False,
+                                                    'measure_goal' : False,
+                                                    'rotate_goal' : True},
+                'pointnet_untrained_forward' : {'embedding' : 'pointnet',
+                                                    'pretrained' : False,
+                                                    'subgoal' : False,
+                                                    'forward_backward' : False,
+                                                    'continual_guidance' : False,
+                                                    'measure_goal' : False,
+                                                    'rotate_goal' : True},}
 
     for train_name, train_params in train_dict.items():
         ckpt_dir = 'checkpoints/' + train_name

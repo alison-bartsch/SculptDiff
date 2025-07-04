@@ -13,7 +13,7 @@ from scipy.spatial.transform import Rotation
     # 
 
 class ClayDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_dir, pred_horizon, n_datapoints, n_raw_trajectories, center_action):
+    def __init__(self, dataset_dir, pred_horizon, n_datapoints, n_raw_trajectories, center_action, rotate_goal=True):
         """
         The Dataloader for the clay sculpting dataset at the Trajectory level (compatible with ACT and Diffusion Policy). 
 
@@ -29,6 +29,7 @@ class ClayDataset(torch.utils.data.Dataset):
         self.n_datapoints = n_datapoints
         self.n_raw_trajectories = n_raw_trajectories
         self.center_action = center_action
+        self.rotate_goal = rotate_goal
         self.ee_center = np.array([0.608, 0.014, 0.125])
         self.pcl_center = np.array([0.630, -0.0054, 0.074])
 
@@ -296,8 +297,12 @@ class ClayDataset(torch.utils.data.Dataset):
         g = np.load(traj_path + '/unnormalized_pointcloud' + str(j-1) + '.npy') # set the goal point cloud to be the last pcl in demo trajectory
         # g_rot = self._rotate_pcl(g, centers[start_ts], aug_rot)
         # goal = self._center_pcl(g_rot, centers[start_ts])
-        g_rot = self._rotate_pcl(g, self.pcl_center, aug_rot)
-        goal = self._center_pcl(g_rot, self.pcl_center)
+        if self.rotate_goal:
+            g_rot = self._rotate_pcl(g, self.pcl_center, aug_rot)
+            goal = self._center_pcl(g_rot, self.pcl_center)
+        
+        else:
+            goal = self._center_pcl(g, self.pcl_center)
 
         action = actions[start_ts:]
         action = np.stack(action, axis=0)
@@ -730,6 +735,8 @@ class ClayDatasetContinualGuidance(torch.utils.data.Dataset):
 
         # create an array going linearly from -1 to 1 with the length of the episode
         guidance = np.linspace(-1, 1, episode_len)
+        # expand dimensions
+        guidance = np.expand_dims(guidance, axis=1)
         
         # load uncentered goal
         g = np.load(traj_path + '/unnormalized_pointcloud' + str(j-1) + '.npy') # set the goal point cloud to be the last pcl in demo trajectory
@@ -738,10 +745,6 @@ class ClayDatasetContinualGuidance(torch.utils.data.Dataset):
 
         action = actions[start_ts:]
         action = np.stack(action, axis=0)
-
-        # # add in termination token -1 continue, 1 stop
-        # stop_token = -1 * np.ones((action.shape[0], 1))
-        # stop_token[-1] = 1
         action = np.concatenate((action, guidance[start_ts:]), axis=1)
         
         action_len = episode_len - start_ts
@@ -904,6 +907,8 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
         # check if need to wrap angles for unexecutable zone
         if action_aug[5] > 207:
             action_aug[5] = 207
+        
+        return action_aug
     
     
     # def _rotate_action(self, action, center, rot):
@@ -987,12 +992,9 @@ class ClayDatasetForwardBackward(torch.utils.data.Dataset):
             if j != 0:
                 # load unnormalized action
                 a = np.load(traj_path + '/action7d_unnormalized' + str(j-1) + '.npy')
-                # fix the r_x scaling
-                # a[3] = self._wrap_rz(a[3])
-                # NOTE: need to go through and verify the action is correct (i.e. wrapping rz is flipping rx, etc.)
-                # a_rot = self._rotate_action(a, ctr, aug_rot)
 
                 a = self._fix_real_action(a)
+                
                 a_rot = self._rotate_action(a, self.ee_center, aug_rot)
                 if self.center_action:
                     a_scaled = self._center_normalize_action(a_rot, self.ee_center)
