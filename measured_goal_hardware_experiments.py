@@ -160,7 +160,7 @@ def sculptdiff_generate_actions(pointbert, projection_head, goal_head, noise_sch
     return naction, end - start
 
 
-def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check):
+def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, numpy_goal, collision_check):
     '''
     '''
     # define diffusion parameters
@@ -209,12 +209,12 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     pointbert.to(device)
 
     # load projection head from ckpt_dir
-    enc_checkpoint = torch.load(ckpt_dir + '/encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
+    enc_checkpoint = torch.load(ckpt_dir + '/projection_encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
     projection_head = enc_checkpoint['encoder_head'].to(device)
 
     # load goal head from ckpt_dir
     goal_checkpoint = torch.load(ckpt_dir + '/goal_measure_best_checkpoint.zip', map_location=torch.device('cpu'))
-    goal_head = goal_checkpoint['goal_measure_encoder']
+    goal_head = goal_checkpoint['goal_measure_encoder'].to(device)
 
     # load noise_pred_net from ckpt_dir
     noise_checkpoint = torch.load(ckpt_dir + '/noise_pred_best_checkpoint.zip', map_location=torch.device('cpu')) 
@@ -270,9 +270,9 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     # dist_goal = np.copy(numpy_goal)
 
     # # visualize observation vs goal cloud
-    # pcl = o3d.geometry.PointCloud()
-    # pcl.points = o3d.utility.Vector3dVector(pointcloud)
-    # pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
+    pcl = o3d.geometry.PointCloud()
+    pcl.points = o3d.utility.Vector3dVector(pointcloud)
+    pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
     # goal_pcl = o3d.geometry.PointCloud()
     # goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
     # goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
@@ -437,9 +437,9 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             # dist_goal = np.copy(numpy_goal)
 
             # # visualize observation vs goal cloud
-            # pcl = o3d.geometry.PointCloud()
-            # pcl.points = o3d.utility.Vector3dVector(pointcloud)
-            # pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
+            pcl = o3d.geometry.PointCloud()
+            pcl.points = o3d.utility.Vector3dVector(pointcloud)
+            pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
             # goal_pcl = o3d.geometry.PointCloud()
             # goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
             # goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
@@ -530,7 +530,7 @@ if __name__ == '__main__':
     exp_num = 1
     goal_shape = 'pottery' 
     model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointbert_pretrained_measured_goal' # new_data_16_pred_june30_updated_augs'
-    goal = np.array([8]) 
+    goal_arr = np.array([10]) 
     centered_action = False
     pred_horizon = 16 
     execute_horizon = 8
@@ -556,7 +556,7 @@ if __name__ == '__main__':
     # make the experiment dictionary with important information for the experiment run
     exp_dict = {'goal: ', goal_shape,
                 'model: ', model_path,
-                'goal: ', goal,
+                'goal: ', goal_arr[0],
                 'centered_action: ', centered_action,
                 'pred_horizon: ', pred_horizon,
                 'execute_horizon: ', execute_horizon,
@@ -593,7 +593,7 @@ if __name__ == '__main__':
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal, collision_check))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal_arr, collision_check))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, video_save_path, done_queue))
 
     main_thread.start()

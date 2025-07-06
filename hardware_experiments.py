@@ -544,17 +544,18 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # ---------------- Experimental Parameters to Define ----------------
     # -------------------------------------------------------------------
-    # straight wall train: Trajectory6/unnormalized_pointcloud29.npy [8 cm]
+    # * straight wall train: Trajectory6/unnormalized_pointcloud29.npy [8 cm] <--- worked with 8 execute horizon, fails with 4
     # alternative straight wall train: Trajectory1/unnormalized_pointcloud31.npy
-    # other alternative straight wall train: Trajectory5/unnormalized_pointcloud24.npy
-    # slanted wall train: Trajectory3/unnormalized_pointcloud28.npy [10 cm]
+    # other alternative straight wall train: Trajectory5/unnormalized_pointcloud24.npy [7 cm]
+    # * slanted wall train: Trajectory3/unnormalized_pointcloud28.npy [10 cm]
     # alternative slanted wall train: Trajectory8/unnormalized_pointcloud24.npy [11 cm]
+    # * more slanted wall train: Trajectory9/unnormalized_pointcloud22.npy [12 cm]
     # straight wall test: Trajectory4/unnormalized_pointcloud19.npy [8 cm]
     # slanted wall test: Trajectory2/unnormalized_pointcloud22.npy [10 cm]
     exp_num = 1
     goal_shape = 'pottery' 
     model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointbert_pretrained_forward' # new_data_16_pred_june30_updated_augs'
-    goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory6/unnormalized_pointcloud29.npy' # Test/Trajectory0/unnormalized_pointcloud23.npy'  # '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
+    goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory9/unnormalized_pointcloud22.npy' # Test/Trajectory0/unnormalized_pointcloud23.npy'  # '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
     execute_horizon = 8
