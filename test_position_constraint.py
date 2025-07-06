@@ -12,9 +12,9 @@ ee_center = np.array([0.608, 0.014, 0.125])
 
 # initialize the robot and reset joints
 fa = FrankaArm()
-fa.reset_joints()
-fa.open_gripper()
-fa.goto_gripper(0.04)
+# fa.reset_joints()
+# fa.open_gripper()
+# fa.goto_gripper(0.04)
 
 # initialize the cameras
 cam1 = vis.CameraClass(1)
@@ -30,7 +30,7 @@ pcl_vis = vis.Vision3D()
 observation_pose = fa.get_pose()
 observation_translation = np.array([0.625, 0, 0.325]) # np.array([0.6, 0, 0.325])
 observation_pose.translation = observation_translation
-fa.goto_pose(observation_pose)
+# fa.goto_pose(observation_pose)
 
 # define initial joint rotation
 joints = fa.get_joints()
@@ -76,12 +76,13 @@ maxy = pcl_maxs[1]
 # best circle fit to minimize radius, but fit most ~95% of points inside
 
 # get the mean radius constraint
-r = np.mean([maxx-minx, maxy-miny]) - 0.03
+r = np.mean([maxx-minx, maxy-miny]) / 2.0 # - 0.03
+print("\nR: ", r)
 
 # create red point cloud of points along the circle with that radius
 theta = np.linspace(0, 2 * np.pi, 100)
-goal_x = r * np.cos(theta) + (maxx + minx) / 2
-goal_y = r * np.sin(theta) + (maxy + miny) / 2
+goal_x = ((r * np.cos(theta) + (maxx + minx) / 2) + pcl_center[0]) * 10.0
+goal_y = ((r * np.sin(theta) + (maxy + miny) / 2) + pcl_center[1]) * 10.0
 goal_z = np.zeros_like(goal_x) + (pcl_center[2] - 0.03) # slightly below the center of the point cloud
 goal_pcl = o3d.geometry.PointCloud()
 goal_pcl.points = o3d.utility.Vector3dVector(np.column_stack((goal_x, goal_y, goal_z)))
@@ -92,16 +93,16 @@ o3d.visualization.draw_geometries([pcl, goal_pcl])
 
 # alternatively, project all points in pointcloud into the x,y plane and fit a circle to those points
 # project points into x,y plane
-pcl_xy = pointcloud[:, :2]  # take only x and y components
+pcl_xy = pcl_copy[:, :2]  # take only x and y components
 from sklearn.metrics import pairwise_distances
 # calculate pairwise distances
 distances = pairwise_distances(pcl_xy, metric='euclidean')
 # find the radius such that 95% of points are within that radius
-radius = np.percentile(distances, 95)
+radius = np.percentile(distances, 95) / 2.0
 print("Radius constraint: ", radius)
 # create green point cloud of points along the circle with that radius
-goal_x = radius * np.cos(theta) + (maxx + minx) / 2
-goal_y = radius * np.sin(theta) + (maxy + miny) / 2
+goal_x = ((radius * np.cos(theta) + (maxx + minx) / 2) + pcl_center[0]) * 10.0
+goal_y = ((radius * np.sin(theta) + (maxy + miny) / 2) + pcl_center[1]) * 10.0
 goal_z = np.zeros_like(goal_x) + (pcl_center[2] - 0.03) # slightly below the center of the point cloud
 goal_pcl = o3d.geometry.PointCloud()
 goal_pcl.points = o3d.utility.Vector3dVector(np.column_stack((goal_x, goal_y, goal_z)))
@@ -110,11 +111,13 @@ o3d.visualization.draw_geometries([pcl, goal_pcl])
 
 # instead of using a circle constraint, we can use an ellipse constraint
 # create ellipse constraint
-ellipse_a = (maxx - minx) / 2
-ellipse_b = (maxy - miny) / 2
+ellipse_a = ((maxx - minx) / 2.0) - 0.007
+ellipse_b = ((maxy - miny) / 2.0) - 0.007
+print("Rx: ", ellipse_a)
+print("Ry: ", ellipse_b)
 # create red point cloud of points along the ellipse with that radius
-goal_x = ellipse_a * np.cos(theta) + (maxx + minx) / 2
-goal_y = ellipse_b * np.sin(theta) + (maxy + miny) / 2
+goal_x = ((ellipse_a * np.cos(theta) + (maxx + minx) / 2) + pcl_center[0]) * 10.0
+goal_y = ((ellipse_b * np.sin(theta) + (maxy + miny) / 2) + pcl_center[1]) * 10.0
 goal_z = np.zeros_like(goal_x) + (pcl_center[2] - 0.03) # slightly below the center of the point cloud
 goal_pcl = o3d.geometry.PointCloud()
 goal_pcl.points = o3d.utility.Vector3dVector(np.column_stack((goal_x, goal_y, goal_z)))

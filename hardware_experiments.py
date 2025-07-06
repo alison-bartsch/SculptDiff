@@ -19,12 +19,63 @@ from scipy.spatial.transform import Rotation
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
 
+# def get_constrained_action(unnorm_a, pointcloud):
+#     '''
+#     Constrain the unnorm_a x,y components to the constraint
+#     that x^2 + y^2 >= r, where r is the mean radius of the 
+#     current clay circle (calculated by getting min/max of 
+#     the point cloud).
+#     '''
+#     pcl_center = np.array([0.630, -0.0054, 0.074])
+#     ee_center = np.array([0.608, 0.014, 0.125])
+
+#     # get the min and max x and y components of the pointcloud
+#     pcl_copy = copy.deepcopy(pointcloud)
+#     pcl_copy = pcl_copy / 10.0
+#     pcl_copy = pcl_copy - pcl_center
+#     pcl_mins = np.min(pcl_copy, axis=0) 
+#     pcl_maxs = np.max(pcl_copy, axis=0) 
+#     minx = pcl_mins[0]
+#     maxx = pcl_maxs[0] 
+#     miny = pcl_mins[1]
+#     maxy = pcl_maxs[1]
+
+#     # NOTE: if this is not a reliable way to find good radius constraint (i.e. too much noise)
+#     # then instead project all points into x,y plane and do a few optimization steps to find
+#     # best circle fit to minimize radius, but fit most ~95% of points inside
+
+#     # get the mean radius constraint
+#     r = np.mean([maxx-minx, maxy-miny]) / 2.0
+
+#     # center the unnorm_a x and y components
+#     x = unnorm_a[0] - ee_center[0]
+#     y = unnorm_a[1] - ee_center[1]
+#     print("\nOld x,y: ", x, y)
+#     print("R: ", r)
+
+#     # check if already follows constraint
+#     norm_sq = x**2 + y**2
+#     if norm_sq >= r**2:
+#         return unnorm_a
+
+#     scale = np.sqrt((r**2) / norm_sq)
+#     x_new = x * scale
+#     y_new = y * scale
+#     print("New x,y : ", x_new, y_new)
+
+#     a_new = unnorm_a.copy()
+#     a_new[0] = x_new + ee_center[0]
+#     a_new[1] = y_new + ee_center[1]
+#     print("\nPrevious Action: ", unnorm_a)
+#     print("New Constrained Action: ", a_new)
+#     return a_new
+
+
 def get_constrained_action(unnorm_a, pointcloud):
     '''
-    Constrain the unnorm_a x,y components to the constraint
-    that x^2 + y^2 >= r, where r is the mean radius of the 
-    current clay circle (calculated by getting min/max of 
-    the point cloud).
+    Constrain the unnorm_a x,y components to the elliptical
+    constraint given the measured diameters along x and y
+    of the point cloud.
     '''
     pcl_center = np.array([0.630, -0.0054, 0.074])
     ee_center = np.array([0.608, 0.014, 0.125])
@@ -40,25 +91,21 @@ def get_constrained_action(unnorm_a, pointcloud):
     miny = pcl_mins[1]
     maxy = pcl_maxs[1]
 
-    # NOTE: if this is not a reliable way to find good radius constraint (i.e. too much noise)
-    # then instead project all points into x,y plane and do a few optimization steps to find
-    # best circle fit to minimize radius, but fit most ~95% of points inside
-
-    # get the mean radius constraint
-    r = np.mean([maxx-minx, maxy-miny]) - 0.03
+    ellipse_a = ((maxx - minx) / 2.0) - 0.007
+    ellipse_b = ((maxy - miny) / 2.0) - 0.007
 
     # center the unnorm_a x and y components
     x = unnorm_a[0] - ee_center[0]
     y = unnorm_a[1] - ee_center[1]
     print("\nOld x,y: ", x, y)
-    print("R: ", r)
+    print("R: ", ellipse_a, ellipse_b)
 
     # check if already follows constraint
-    norm_sq = x**2 + y**2
-    if norm_sq >= r**2:
+    norm_sq = (x**2) / (ellipse_a**2) + (y**2) / (ellipse_b**2)
+    if norm_sq >= 1:
         return unnorm_a
 
-    scale = np.sqrt((r**2) / norm_sq)
+    scale = np.sqrt(1 / norm_sq)
     x_new = x * scale
     y_new = y * scale
     print("New x,y : ", x_new, y_new)
@@ -69,7 +116,6 @@ def get_constrained_action(unnorm_a, pointcloud):
     print("\nPrevious Action: ", unnorm_a)
     print("New Constrained Action: ", a_new)
     return a_new
-
 
 
 
