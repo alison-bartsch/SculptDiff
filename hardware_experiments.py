@@ -2,6 +2,7 @@ import os
 import cv2
 import time
 import math
+import copy
 import torch
 import queue
 import threading
@@ -16,6 +17,61 @@ from pointBERT.tools import builder
 from pointBERT.utils.config import cfg_from_yaml_file
 from scipy.spatial.transform import Rotation
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
+
+
+def get_constrained_action(unnorm_a, pointcloud):
+    '''
+    Constrain the unnorm_a x,y components to the constraint
+    that x^2 + y^2 >= r, where r is the mean radius of the 
+    current clay circle (calculated by getting min/max of 
+    the point cloud).
+    '''
+    pcl_center = np.array([0.630, -0.0054, 0.074])
+    ee_center = np.array([0.608, 0.014, 0.125])
+
+    # get the min and max x and y components of the pointcloud
+    pcl_copy = copy.deepcopy(pointcloud)
+    pcl_copy = pcl_copy / 10.0
+    pcl_copy = pcl_copy - pcl_center
+    pcl_mins = np.min(pcl_copy, axis=0) 
+    pcl_maxs = np.max(pcl_copy, axis=0) 
+    minx = pcl_mins[0]
+    maxx = pcl_maxs[0] 
+    miny = pcl_mins[1]
+    maxy = pcl_maxs[1]
+
+    # NOTE: if this is not a reliable way to find good radius constraint (i.e. too much noise)
+    # then instead project all points into x,y plane and do a few optimization steps to find
+    # best circle fit to minimize radius, but fit most ~95% of points inside
+
+    # get the mean radius constraint
+    r = np.mean([maxx-minx, maxy-miny]) - 0.03
+
+    # center the unnorm_a x and y components
+    x = unnorm_a[0] - ee_center[0]
+    y = unnorm_a[1] - ee_center[1]
+    print("\nOld x,y: ", x, y)
+    print("R: ", r)
+
+    # check if already follows constraint
+    norm_sq = x**2 + y**2
+    if norm_sq >= r**2:
+        return unnorm_a
+
+    scale = np.sqrt((r**2) / norm_sq)
+    x_new = x * scale
+    y_new = y * scale
+    print("New x,y : ", x_new, y_new)
+
+    a_new = unnorm_a.copy()
+    a_new[0] = x_new + ee_center[0]
+    a_new[1] = y_new + ee_center[1]
+    print("\nPrevious Action: ", unnorm_a)
+    print("New Constrained Action: ", a_new)
+    return a_new
+
+
+
 
 
 def calculate_intermediate_pose(final_pose, dist=0.055):
@@ -171,7 +227,7 @@ def sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noi
     return naction, end - start
 
 
-def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check):
+def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check, constraint_projection):
     '''
     '''
     # define diffusion parameters
@@ -235,7 +291,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     pointbert.to(device)
 
     # load projection head from ckpt_dir
-    enc_checkpoint = torch.load(ckpt_dir + '/encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
+    enc_checkpoint = torch.load(ckpt_dir + '/projection_encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
     projection_head = enc_checkpoint['encoder_head'].to(device)
 
     # load noise_pred_net from ckpt_dir
@@ -353,6 +409,9 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             unnorm_a = action_pred[j,:]
             print("\nSingle-step action: ", unnorm_a)
             terminate = termination_pred[j]
+
+            if iter > 2 and constraint_projection:
+                unnorm_a = get_constrained_action(unnorm_a, pointcloud)
 
             # check for collision with the point cloud if the initial piercing actions have been executed
             if iter > 6 and collision_check:
@@ -554,12 +613,13 @@ if __name__ == '__main__':
     # slanted wall test: Trajectory2/unnormalized_pointcloud22.npy [10 cm]
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointbert_pretrained_forward' # new_data_16_pred_june30_updated_augs'
-    goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory9/unnormalized_pointcloud22.npy' # Test/Trajectory0/unnormalized_pointcloud23.npy'  # '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointbert_pretrained_no_rotate_goal' # new_data_16_pred_june30_updated_augs'
+    goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory6/unnormalized_pointcloud29.npy' # Test/Trajectory0/unnormalized_pointcloud23.npy'  # '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
     execute_horizon = 8
     collision_check = False
+    constraint_projection = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -585,7 +645,8 @@ if __name__ == '__main__':
                 'centered_action: ', centered_action,
                 'pred_horizon: ', pred_horizon,
                 'execute_horizon: ', execute_horizon,
-                'collision_check: ', collision_check}
+                'collision_check: ', collision_check,
+                'constraint_prjection: ', constraint_projection}
     
     with open(exp_save + '/experiment_params.txt', 'w') as f:
         f.write(str(exp_dict))
@@ -618,7 +679,7 @@ if __name__ == '__main__':
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check, constraint_projection))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, video_save_path, done_queue))
 
     main_thread.start()
