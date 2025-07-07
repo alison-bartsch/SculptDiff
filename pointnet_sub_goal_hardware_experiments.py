@@ -2,8 +2,8 @@ import os
 import cv2
 import time
 import math
-import copy
 import torch
+import copy
 import queue
 import threading
 import numpy as np
@@ -13,11 +13,8 @@ import robomail.vision as vis
 from frankapy import FrankaArm
 from pcl_utils import *
 from test_collision_checker import check_finger_collision
-from pointBERT.tools import builder
-from pointBERT.utils.config import cfg_from_yaml_file
 from scipy.spatial.transform import Rotation
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
-
 
 def get_constrained_action(unnorm_a, pointcloud):
     '''
@@ -45,7 +42,7 @@ def get_constrained_action(unnorm_a, pointcloud):
     # best circle fit to minimize radius, but fit most ~95% of points inside
 
     # get the mean radius constraint
-    r = (np.mean([maxx-minx, maxy-miny]) / 2.0) - 0.007
+    r = (np.mean([maxx-minx, maxy-miny]) / 2.0) - 0.0025
 
     # center the unnorm_a x and y components
     x = unnorm_a[0] - ee_center[0]
@@ -69,7 +66,6 @@ def get_constrained_action(unnorm_a, pointcloud):
     print("\nPrevious Action: ", unnorm_a)
     print("New Constrained Action: ", a_new)
     return a_new
-
 
 def calculate_intermediate_pose(final_pose, dist=0.055):
     """
@@ -107,6 +103,7 @@ def get_durations(rz):
         inpos_duration = 7
         reset_duration = 5
     return rot_duration, inpos_duration, reset_duration
+
 
 def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     """
@@ -156,33 +153,45 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     time.sleep(3)
     return intermediate_pose
 
-def sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device):
+def subgoal_sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_scheduler, noise_pred_net, pointcloud, raw_goals, ctr, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device, discounted):
     B = 1
     with torch.inference_mode():
         start = time.time()
         # pass the point cloud through Point-BERT to get the latent representation
         state = torch.from_numpy(pointcloud).to(torch.float32)
         states = torch.unsqueeze(state, 0).to(device)
-        tokenized_states = pointbert(states)
+        print("states shape: ", states.shape)
+        tokenized_states, _  = pointnet_encoder(states)
         pcl_embed = projection_head(tokenized_states)
         pointcloud_features = pcl_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
 
+        obs_list = [nagent_pos, pointcloud_features]
+
         # pass the goal cloud through Point-BERT and projection head
-        goal = numpy_goal.copy()
-        goal = torch.from_numpy(goal).to(torch.float32)
-        goals = torch.unsqueeze(goal, 0).to(device)
-        tokenized_goals = pointbert(goals)
-        goal_embed = projection_head(tokenized_goals)
-        goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
+        # for subgoal in raw_goals:
+        for i in range(len(raw_goals)-1):
+            subgoal = raw_goals[i+1] # NOTE: we are taking the current observation as state
+            print("iterating through raw goals")
+            np_goal = (subgoal - ctr) * 10.0
+            goal = np_goal.copy()
+            goal = torch.from_numpy(goal).to(torch.float32)
+            goals = torch.unsqueeze(goal, 0).to(device)
+            tokenized_goals, _  = pointnet_encoder(goals)
+            goal_embed = projection_head(tokenized_goals)
+            if discounted:
+                discount_factor = 0.9
+                goal_embed = discount_factor ** (i+1) * goal_embed
+            goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
+            obs_list.append(goalcloud_features)
 
         # concatenate vision feature and low-dim obs
         print("\nNagent pos: ", nagent_pos)
-        obs_features = torch.cat([pointcloud_features, nagent_pos, goalcloud_features],dim=-1)
+        obs_features = torch.cat(obs_list,dim=-1)
         obs_cond = obs_features.flatten(start_dim=1)
 
         # initialize action from Guassian noise
         noisy_action = torch.randn(
-            (B, 2*pred_horizon, action_dim), device=device)
+            (B, pred_horizon, action_dim), device=device)
         naction = noisy_action
 
         # init scheduler
@@ -203,18 +212,41 @@ def sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noi
                 sample=naction
             ).prev_sample
 
-        # unnormalize action
-        naction = naction.detach().to('cpu').numpy()
-        end = time.time()
+    # unnormalize action
+    naction = naction.detach().to('cpu').numpy()
+    end = time.time()
     return naction, end - start
 
 
-def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check, constraint_projection):
+# def goto_grasp(fa, x, y, z, rx, ry, rz, d):
+# 	"""
+# 	Parameterize a grasp action by the position [x,y,z] Euler angle rotation [rx,ry,rz], and width [d] of the gripper.
+# 	This function was designed to be used for clay moulding, but in practice can be applied to any task.
+
+# 	:param fa:  franka robot class instantiation
+# 	"""
+# 	pose = fa.get_pose()
+# 	starting_rot = pose.rotation
+# 	orig = Rotation.from_matrix(starting_rot)
+# 	orig_euler = orig.as_euler('xyz', degrees=True)
+# 	rot_vec = np.array([rx, ry, rz])
+# 	new_euler = orig_euler + rot_vec
+# 	r = Rotation.from_euler('xyz', new_euler, degrees=True)
+# 	pose.rotation = r.as_matrix()
+# 	pose.translation = np.array([x, y, z])
+
+# 	fa.goto_pose(pose)
+# 	fa.goto_gripper(d, force=60.0)
+# 	time.sleep(3)
+
+def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_shape, ckpt_dir, done_queue, pred_horizon, execute_horizon, centered_action, sub_goal_step, nested_sub_goal_list, collision_check, discounted, constraint_projection):
     '''
     '''
     # define diffusion parameters
     obs_horizon = 1
     B = 1
+    # pred_horizon = 12
+    # subgoal_stepsize = 4
     action_dim = 8
     num_diffusion_iters = 100
     noise_scheduler = DDPMScheduler(
@@ -236,27 +268,22 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
         a_mins7d = np.array([-0.15, -0.15, -0.05, -90, 0.005])
         a_maxs7d = np.array([0.15, 0.15, 0.05, 90, 0.05])
     else:
+        # a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
+        # a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
         a_mins7d = np.load(ckpt_dir + '/action_mins.npy')
         a_maxs7d = np.load(ckpt_dir + '/action_maxs.npy')
 
-    
     global_pcl_center = np.array([0.630, -0.0054, 0.074])
 
-
     qpos = np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04])
-    prev_action = qpos.copy()
     qpos = (qpos - a_mins7d) / (a_maxs7d - a_mins7d)
     qpos = qpos * 2.0 - 1.0
     qpos = np.concatenate((qpos, np.array([-1.])), axis=0)
     nagent_pos = torch.from_numpy(qpos).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
 
-    # initialize the pointbert model
-    testconfig = cfg_from_yaml_file('pointBERT/cfgs/PointTransformer.yaml')
-    testmodel_config = testconfig.model
-    pointbert = builder.model_builder(testmodel_config)
-    testweights_path = ckpt_dir + '/pointbert_statedict.zip' 
-    pointbert.load_state_dict(torch.load(testweights_path))
-    pointbert.to(device)
+    # initialize the pointnet model
+    pointnet_encoder_state_dict = torch.load(ckpt_dir + '/pointnet_best_checkpoint.zip', map_location=torch.device('cpu'))
+    pointnet_encoder = pointnet_encoder_state_dict['encoder'].to(device)
 
     # load projection head from ckpt_dir
     enc_checkpoint = torch.load(ckpt_dir + '/projection_encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
@@ -267,7 +294,9 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     noise_pred_net = noise_checkpoint['noise_pred_net'].to(device)
 
     # load in the goal
-    raw_goal = np.load(goal_path)
+    # raw_goal = np.load('goals/' + goal_str + '.npy')
+    # raw_goal = np.load('/home/alison/Clay_Data/Feb26_Human_Demos_Raw/pottery/Trajectory1/unnormalized_pointcloud26.npy')
+    # /home/alison/Clay_Data/Feb26_Human_Demos_Raw/pottery/Trajectory5
 
     # define observation pose
     observation_pose = fa.get_pose()
@@ -292,8 +321,6 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     rgb4, _, pc4, _ = cam4._get_next_frame()
     rgb5, _, pc5, _ = cam5._get_next_frame()
 
-    # unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
-
     # for 5x cameras, we need to get the ee pose
     cur_pose = fa.get_pose()
     translation = cur_pose.translation
@@ -311,19 +338,18 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     o3d.io.write_point_cloud(save_path + '/cam4_pcl0.ply', pc4)
     o3d.io.write_point_cloud(save_path + '/cam5_pcl0.ply', pc5)
 
-    # center the goal based on the goal center
-    # numpy_goal = (np.copy(raw_goal) - ctr) * 10.0
-    numpy_goal = (np.copy(raw_goal) - global_pcl_center) * 10
-    # scale distance metric goal differently 
-    dist_goal = np.copy(numpy_goal)
+    # # center the goal based on the goal center
+    # numpy_goal = (raw_goal - ctr) * 10.0
+    # # scale distance metric goal differently 
+    # dist_goal = numpy_goal.copy()
 
     # visualize observation vs goal cloud
     pcl = o3d.geometry.PointCloud()
-    pcl.points = o3d.utility.Vector3dVector(pointcloud)
-    pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
-    goal_pcl = o3d.geometry.PointCloud()
-    goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
-    goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
+    pcl.points = o3d.utility.Vector3dVector(unnorm_pcl)
+    pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(unnorm_pcl),1)))
+    # goal_pcl = o3d.geometry.PointCloud()
+    # goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
+    # goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
     # o3d.visualization.draw_geometries([pcl, goal_pcl])
 
     # save observation
@@ -335,31 +361,40 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     cv2.imwrite(save_path + '/rgb4_state0.jpg', rgb4)
     cv2.imwrite(save_path + '/rgb5_state0.jpg', rgb5)
 
-    print("\nMax unnorm pcl: ", np.max(unnorm_pcl, axis=0))
-    print("\nMax raw goal: ", np.max(raw_goal, axis=0))
+    # # get the distance metrics between the point cloud and goal
+    # dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goal),
+    #                 'EMD': emd(unnorm_pcl, raw_goal),
+    #                 'HAUSDORFF': hausdorff(unnorm_pcl, raw_goal)}
 
-    # get the distance metrics between the point cloud and goal
-    dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goal),
-                    'EMD': emd(unnorm_pcl, raw_goal),
-                    'HAUSDORFF': hausdorff(unnorm_pcl, raw_goal)}
-
-    print("\nDists: ", dist_metrics)
-
-    # calculate the dist metrics if the pcls are centered
-    ctr_pcl = unnorm_pcl.copy() - np.mean(unnorm_pcl, axis=0)
-    ctr_goal = raw_goal.copy() - np.mean(raw_goal, axis=0)
-    centered_dists = {'CD': chamfer(ctr_pcl, ctr_goal),
-                    'EMD': emd(ctr_pcl, ctr_goal),
-                    'HAUSDORFF': hausdorff(ctr_pcl, ctr_goal)}
-    print("\nCentered Dists: ", centered_dists)
-
-    with open(save_path + '/dist_metrics_0.txt', 'w') as f:
-        f.write(str(dist_metrics))
+    # print("\nDists: ", dist_metrics)
+    # with open(save_path + '/dist_metrics_0.txt', 'w') as f:
+    #     f.write(str(dist_metrics))
 
     iter = 1
     in_progress = True
-    while in_progress:
-        naction, total_time = sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device)
+    # while in_progress:
+    # for sub_goal in sub_goal_list:
+    # for step in range(len(sub_goal_list)):
+    # for raw_goals in sub_goal_list:
+    for raw_goals in nested_sub_goal_list:
+        print("\nin the loop...")
+        # raw_goals = sub_goal_list[step]
+        # center the goal based on the goal center
+        numpy_goal = (raw_goals[0] - global_pcl_center) * 10.0
+        # scale distance metric goal differently 
+        dist_goal = numpy_goal.copy()
+
+        if iter == 1:
+            # get the distance metrics between the point cloud and goal
+            dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goals[0]),
+                            'EMD': emd(unnorm_pcl, raw_goals[0]),
+                            'HAUSDORFF': hausdorff(unnorm_pcl, raw_goals[0])}
+
+            print("\nDists: ", dist_metrics)
+            with open(save_path + '/dist_metrics_0.txt', 'w') as f:
+                f.write(str(dist_metrics))
+
+        naction, total_time = subgoal_sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_scheduler, noise_pred_net, pointcloud, raw_goals, global_pcl_center, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device, discounted)
         og_nagent_pos = nagent_pos.detach().clone()
         og_pointcloud = pointcloud.copy()
         planning_time_list.append(total_time)
@@ -371,23 +406,17 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
         print("\nTermination prediction: ", termination_pred)
         action_pred = (pred_action[:,0:7] + 1.0) / 2.0
         action_pred = action_pred * (a_maxs7d - a_mins7d) + a_mins7d
-
-        # here would be where an mse check on the previous actions would be interesting!
-        last_pred_action = action_pred[pred_horizon]
-        gt_last_action = prev_action
-        # get the mse between the last predicted action and the ground truth last action
-        mse_last_action = np.mean((last_pred_action - gt_last_action) ** 2)
-        print("\nMSE between last predicted action and ground truth last action: ", mse_last_action)
         
         # for j in range(action_pred.shape[0]):
         for j in range(execute_horizon):
-            unnorm_a = action_pred[j+pred_horizon,:] # start at the point where not predicting previous actions
+            unnorm_a = action_pred[j,:]
             print("\nSingle-step action: ", unnorm_a)
             terminate = termination_pred[j]
 
             if iter > 2 and constraint_projection:
                 unnorm_a = get_constrained_action(unnorm_a, pointcloud)
 
+            # TODO: uncomment after debugging
             # check for collision with the point cloud if the initial piercing actions have been executed
             if iter > 6 and collision_check:
                 collision = check_finger_collision(unnorm_a, pcl, vis=False)
@@ -395,21 +424,21 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
                 while collision and n_checks < 10:
                     n_checks += 1
                     print("\nCollision detected, replanning...")
-                    naction, total_time = sculptdiff_generate_actions(pointbert, projection_head, noise_scheduler, noise_pred_net, og_pointcloud, numpy_goal, og_nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device)
+                    naction, total_time = subgoal_sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_scheduler, noise_pred_net, og_pointcloud, raw_goals, global_pcl_center, og_nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device, discounted)
                     pred_action = naction[0]
                     termination_pred = pred_action[:,7]
                     action_pred = (pred_action[:,0:7] + 1.0) / 2.0
                     action_pred = action_pred * (a_maxs7d - a_mins7d) + a_mins7d
                     unnorm_a = action_pred[j,:]
-                    print("unnorm a new: ", unnorm_a)
                     terminate = termination_pred[j]
                     collision = check_finger_collision(unnorm_a, pcl, vis=False)
-
+ 
             if centered_action:
                 unnorm_a[0:3] = unnorm_a[0:3] + ctr
 
             # update nagent_pos to be the new position
             nagent_pos = torch.from_numpy(pred_action[j]).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
+            n_action+=1
             
             # check if rotations outside of executable bounds
             # first check rz to wrap within expected range
@@ -417,26 +446,18 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
                 print("Rz too large, wrapping")
                 unnorm_a[5] = -(360 - unnorm_a[5])
             # check if in the unexecutable zone
-            if unnorm_a[5] < -117 and unnorm_a[5] >= -135:
+            if unnorm_a[5] < -120 and unnorm_a[5] >= -135:
                 print("Rz in unexecutable zone, clipping")
                 unnorm_a[5] = -117
             # check if need to wrap angles for unexecutable zone
-            if unnorm_a[5] < -120:
+            elif unnorm_a[5] < -120:
                 print("Rz too small, wrapping")
                 unnorm_a[5] = 180 + 180 - np.abs(unnorm_a[5])
             # check if need to wrap angles for unexecutable zone
-            if unnorm_a[5] > 207:
+            elif unnorm_a[5] > 210:
                 print("Rz in unexecutable zone, clipping")
                 unnorm_a[5] = 207
 
-            if unnorm_a[3] < -45:
-                print("Rx too small")
-                unnorm_a[3] = 360 + unnorm_a[3]
-            elif unnorm_a[3] > 45:
-                print("Rx too big")
-                unnorm_a[3] = unnorm_a[3] - 360
-
-            prev_action = unnorm_a
             intermediate_pose = goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], unnorm_a[3], unnorm_a[4], unnorm_a[5], unnorm_a[6])
             n_action+=1
 
@@ -470,8 +491,6 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             rgb3, _, pc3, _ = cam3._get_next_frame()
             rgb4, _, pc4, _ = cam4._get_next_frame()
             rgb5, _, pc5, _ = cam5._get_next_frame()
-            # unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
-
             # for 5x cameras, we need to get the ee pose
             cur_pose = fa.get_pose()
             translation = cur_pose.translation
@@ -490,15 +509,14 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             o3d.io.write_point_cloud(save_path + '/cam5_pcl' + str(iter) + '.ply', pc5)
 
             # center the goal based on the point cloud center
-            # numpy_goal = (np.copy(raw_goal) - ctr) * 10.0
-            numpy_goal = (np.copy(raw_goal) - global_pcl_center) * 10.0
+            numpy_goal = (raw_goals[0] - global_pcl_center) * 10.0
             # scale distance metric goal differently 
-            dist_goal = np.copy(numpy_goal)
+            dist_goal = numpy_goal.copy()
 
             # visualize observation vs goal cloud
             pcl = o3d.geometry.PointCloud()
-            pcl.points = o3d.utility.Vector3dVector(pointcloud)
-            pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(pointcloud),1)))
+            pcl.points = o3d.utility.Vector3dVector(unnorm_pcl)
+            pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([0,0,1]), (len(unnorm_pcl),1)))
             goal_pcl = o3d.geometry.PointCloud()
             goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
             goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
@@ -514,26 +532,18 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             cv2.imwrite(save_path + '/rgb5_state' + str(iter) + '.jpg', rgb5)
 
             # get the distance metrics between the point cloud and goal
-            dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goal),
-                            'EMD': emd(unnorm_pcl, raw_goal),
-                            'HAUSDORFF': hausdorff(unnorm_pcl, raw_goal)}
+            dist_metrics = {'CD': chamfer(unnorm_pcl, raw_goals[0]),
+                            'EMD': emd(unnorm_pcl, raw_goals[0]),
+                            'HAUSDORFF': hausdorff(unnorm_pcl, raw_goals[0])}
 
             print("\nDists: ", dist_metrics)
             with open(save_path + '/dist_metrics_' + str(iter) + '.txt', 'w') as f:
                 f.write(str(dist_metrics))
-
-            # calculate the dist metrics if the pcls are centered
-            ctr_pcl = unnorm_pcl.copy() - np.mean(unnorm_pcl, axis=0)
-            ctr_goal = raw_goal.copy() - np.mean(raw_goal, axis=0)
-            centered_dists = {'CD': chamfer(ctr_pcl, ctr_goal),
-                            'EMD': emd(ctr_pcl, ctr_goal),
-                            'HAUSDORFF': hausdorff(ctr_pcl, ctr_goal)}
-            print("\nCentered Dists: ", centered_dists)
             
-            # if that action was predicted to be the final action, then terminate the experiment
-            if terminate > 0.95:
-                in_progress = False
-                break
+            # # if that action was predicted to be the final action, then terminate the experiment
+            # if terminate > 0.95:
+            #     in_progress = False
+            #     break
 
             iter += 1
             
@@ -575,45 +585,69 @@ def video_loop(cam_pipeline, save_path, done_queue):
     out.release()
     cv2.destroyAllWindows()
 
+def split_with_horizons(arr, pred_horizon=16, execute_horizon=8, sub_goal_horizon=4):
+    result = []
+    step = execute_horizon // sub_goal_horizon
+    window_size = pred_horizon // sub_goal_horizon + 1
+
+    for i in range(0, len(arr), step):
+        window = arr[i:i + window_size]
+        if len(window) < window_size:
+            new_window = arr[-1] * np.ones(window_size)
+            new_window[0:len(window)] = window
+            window = new_window
+        result.append(window)
+        if i + step >= len(arr):
+            break
+    return result
+
+def load_subgoals(nested_idxs, sub_goal_load_path, sub_goal_name):
+    nested_sub_goal_list = []
+    for i in range(len(nested_idxs)):
+        goal_list = []
+        for j in range(len(nested_idxs[i])):
+            subgoal = np.load(sub_goal_load_path + sub_goal_name + str(int(nested_idxs[i][j])) + '.npy')
+            goal_list.append(subgoal)
+        nested_sub_goal_list.append(goal_list)
+    return nested_sub_goal_list
+
 if __name__ == '__main__':
     # -------------------------------------------------------------------
     # ---------------- Experimental Parameters to Define ----------------
     # -------------------------------------------------------------------
-    # * straight wall train: Trajectory6/unnormalized_pointcloud29.npy [8 cm] <--- worked with 8 execute horizon, fails with 4
-    # * slanted wall train: Trajectory3/unnormalized_pointcloud28.npy [10 cm]
-    # * more slanted wall train: Trajectory9/unnormalized_pointcloud22.npy [12 cm]
-    exp_num = 1
+    exp_num = 10
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointbert_pretrained_forward_backward'
-    goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy' # '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointnet_pretrained_subgoal' 
     centered_action = False
-    pred_horizon = 16 
+    sub_goal_step = 8
+    pred_horizon = 16
     execute_horizon = 8
     collision_check = False
+    discounted = True
     constraint_projection = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
 
-    exp_save = 'Experiments/Exp_FB_' + str(exp_num)
+    exp_save = 'Experiments/Subgoal_Exp' + str(exp_num)
 
     # check to make sure the experiment number is not already in use, if it is, increment the number to ensure no save overwrites
     while os.path.exists(exp_save):
         exp_num += 1
-        exp_save = 'Experiments/Exp_FB_' + str(exp_num)
+        exp_save = 'Experiments/Subgoal_Exp' + str(exp_num)
 
     # make the experiment folder
     os.mkdir(exp_save)
 
     # make the experiment folder for the video save
-    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/Exp_FB_' + str(exp_num))
-    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/Exp_FB_' + str(exp_num)
+    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/Subgoal_Exp' + str(exp_num))
+    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/Subgoal_Exp' + str(exp_num)
 
     # make the experiment dictionary with important information for the experiment run
     exp_dict = {'goal: ', goal_shape,
                 'model: ', model_path,
-                'goal: ', goal_path,
                 'centered_action: ', centered_action,
+                'sub_goal_step: ', sub_goal_step,
                 'pred_horizon: ', pred_horizon,
                 'execute_horizon: ', execute_horizon,
                 'collision_check: ', collision_check,
@@ -622,6 +656,46 @@ if __name__ == '__main__':
     with open(exp_save + '/experiment_params.txt', 'w') as f:
         f.write(str(exp_dict))
 
+    # TODO: load in the list of autoregressively generated sub-goals
+    goal_size = 12
+    sub_goal_load_path = '/home/alison/Documents/GitHub/SculptDiff/subgoals/train/step' + str(sub_goal_step) + '_' + str(goal_size) + '/'
+    # sub_goal_name = 'autoregressive_subgoal'
+    sub_goal_name = 'unnormalized_pointcloud' # 'gt_subgoal'
+    sub_goal_list_idxs = []
+    i = 0
+    while os.path.exists(sub_goal_load_path + sub_goal_name + str(i) + '.npy'):
+        sub_goal_list_idxs.append(i)
+        i += sub_goal_step
+
+    nested_idxs = split_with_horizons(sub_goal_list_idxs, pred_horizon=pred_horizon, execute_horizon=execute_horizon, sub_goal_horizon=sub_goal_step)
+    print("\nNested Subgoal Idxs: ", nested_idxs)
+    nested_sub_goal_list = load_subgoals(nested_idxs, sub_goal_load_path, sub_goal_name)
+    
+    
+    # sub_goal_list = []
+    # i = 0
+    # while os.path.exists(sub_goal_load_path + sub_goal_name + str(i) + '.npy'):
+    #     sub_goal = np.load(sub_goal_load_path + sub_goal_name + str(i) + '.npy')
+    #     sub_goal_list.append(sub_goal)
+    #     i += sub_goal_step
+
+    # # TODO: sub_goal_list should be a list of lists
+    # # each sub-list should contain pred_horizon / sub_goal_step number of sub-goals
+    # if len(sub_goal_list) == 0:
+    #     raise ValueError("No sub-goals found in the specified path. Please check the sub-goal loading path and file naming convention.")
+    # else:
+    #     nested_sub_goal_list = []
+    #     for i in range(0, len(sub_goal_list), pred_horizon // sub_goal_step):
+    #         if len(sub_goal_list[i:i + (pred_horizon // sub_goal_step)]) < (pred_horizon // sub_goal_step):
+    #             sub_list = []
+    #             for j in range((pred_horizon // sub_goal_step)):
+    #                 sub_list.append(sub_goal_list[i])
+    #             nested_sub_goal_list.append(sub_list)
+    #         else:
+    #             nested_sub_goal_list.append(sub_goal_list[i:i + (pred_horizon // sub_goal_step)])
+            # print("Length: ", len(sub_goal_list[i:i + (pred_horizon // sub_goal_step)]))
+
+    
     # initialize the robot and reset joints
     fa = FrankaArm()
     fa.reset_joints()
@@ -647,11 +721,19 @@ if __name__ == '__main__':
     # initialize the 3D vision code
     pcl_vis = vis.Vision3D()    
 
+    # # load in the goal and save to the experiment folder
+    # goal = np.load('goals/' + goal_shape + '.npy')
+    # # center goal
+    # goal = (goal - np.mean(goal, axis=0)) * 10.0
+    # np.save(exp_save + '/goal.npy', goal)
+
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check, constraint_projection))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, pred_horizon, execute_horizon, centered_action, sub_goal_step, nested_sub_goal_list, collision_check, discounted, constraint_projection))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, video_save_path, done_queue))
 
     main_thread.start()
     video_thread.start()
+
+

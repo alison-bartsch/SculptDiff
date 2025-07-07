@@ -3,6 +3,7 @@ import cv2
 import time
 import math
 import torch
+import copy
 import queue
 import threading
 import numpy as np
@@ -16,6 +17,57 @@ from pointBERT.tools import builder
 from pointBERT.utils.config import cfg_from_yaml_file
 from scipy.spatial.transform import Rotation
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
+
+def get_constrained_action(unnorm_a, pointcloud):
+    '''
+    Constrain the unnorm_a x,y components to the constraint
+    that x^2 + y^2 >= r, where r is the mean radius of the 
+    current clay circle (calculated by getting min/max of 
+    the point cloud).
+    '''
+    pcl_center = np.array([0.630, -0.0054, 0.074])
+    ee_center = np.array([0.608, 0.014, 0.125])
+
+    # get the min and max x and y components of the pointcloud
+    pcl_copy = copy.deepcopy(pointcloud)
+    pcl_copy = pcl_copy / 10.0
+    pcl_copy = pcl_copy - pcl_center
+    pcl_mins = np.min(pcl_copy, axis=0) 
+    pcl_maxs = np.max(pcl_copy, axis=0) 
+    minx = pcl_mins[0]
+    maxx = pcl_maxs[0] 
+    miny = pcl_mins[1]
+    maxy = pcl_maxs[1]
+
+    # NOTE: if this is not a reliable way to find good radius constraint (i.e. too much noise)
+    # then instead project all points into x,y plane and do a few optimization steps to find
+    # best circle fit to minimize radius, but fit most ~95% of points inside
+
+    # get the mean radius constraint
+    r = (np.mean([maxx-minx, maxy-miny]) / 2.0) - 0.0025
+
+    # center the unnorm_a x and y components
+    x = unnorm_a[0] - ee_center[0]
+    y = unnorm_a[1] - ee_center[1]
+    print("\nOld x,y: ", x, y)
+    print("R: ", r)
+
+    # check if already follows constraint
+    norm_sq = x**2 + y**2
+    if norm_sq >= r**2:
+        return unnorm_a
+
+    scale = np.sqrt((r**2) / norm_sq)
+    x_new = x * scale
+    y_new = y * scale
+    print("New x,y : ", x_new, y_new)
+
+    a_new = unnorm_a.copy()
+    a_new[0] = x_new + ee_center[0]
+    a_new[1] = y_new + ee_center[1]
+    print("\nPrevious Action: ", unnorm_a)
+    print("New Constrained Action: ", a_new)
+    return a_new
 
 def calculate_intermediate_pose(final_pose, dist=0.055):
     """
@@ -35,6 +87,25 @@ def calculate_intermediate_pose(final_pose, dist=0.055):
     intermediate_pose.translation = intermediate_position
     return intermediate_pose
 
+def get_durations(rz):
+    if rz < -60:
+        rot_duration = 5
+        inpos_duration = 15
+        reset_duration = 9
+    elif rz > 190:
+        rot_duration = 7
+        inpos_duration = 15
+        reset_duration = 9
+    elif rz < 90:
+        rot_duration = 3
+        inpos_duration = 5
+        reset_duration = 4
+    else:
+        rot_duration = 5
+        inpos_duration = 7
+        reset_duration = 5
+    return rot_duration, inpos_duration, reset_duration
+
 
 def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     """
@@ -43,6 +114,9 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
 
     :param fa:  franka robot class instantiation
     """
+    # dynamically decide durations
+    rot_duration, inpos_duration, reset_duration = get_durations(rz)
+
     # NOTE: this function cannot distinguish directional rotation goals for the wrist (i.e. rz)
     # first go to rz in the wrist joints
     local_joints = fa.get_joints()
@@ -53,7 +127,7 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
         local_joints[6] = math.radians(45-intermediate_rz)
     else:
         local_joints[6] = math.radians(45-rz)
-    fa.goto_joints(local_joints, duration=9)
+    fa.goto_joints(local_joints, duration=rot_duration)
     final_joints = fa.get_joints()
     print("Executed to joint angle: ", math.degrees(final_joints[6]))
 
@@ -69,14 +143,14 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
 
     intermediate_pose = calculate_intermediate_pose(pose.copy())
 
-    fa.goto_pose(intermediate_pose, duration=15) # NOTE: used to be duration=6
+    fa.goto_pose(intermediate_pose, duration=inpos_duration) # NOTE: used to be duration=6
 
     if rz < -105:
         new_joints = fa.get_joints()
         new_joints[6] = math.radians(45-rz)
         fa.goto_joints(new_joints, duration=9)
 
-    fa.goto_pose(pose, duration=5)
+    fa.goto_pose(pose, duration=reset_duration)
     fa.goto_gripper(d, force=60.0)
     time.sleep(3)
     return intermediate_pose
@@ -97,8 +171,8 @@ def subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_schedu
 
         # pass the goal cloud through Point-BERT and projection head
         # for subgoal in raw_goals:
-        for i in range(len(raw_goals)):
-            subgoal = raw_goals[i]
+        for i in range(len(raw_goals)-1):
+            subgoal = raw_goals[i+1] # NOTE: we are taking the current observation as state
             print("iterating through raw goals")
             np_goal = (subgoal - ctr) * 10.0
             goal = np_goal.copy()
@@ -167,14 +241,14 @@ def subgoal_sculptdiff_generate_actions(pointbert, projection_head, noise_schedu
 # 	fa.goto_gripper(d, force=60.0)
 # 	time.sleep(3)
 
-def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_shape, ckpt_dir, done_queue, pred_horizon, execute_horizon, centered_action, sub_goal_step, nested_sub_goal_list, collision_check, discounted):
+def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_shape, ckpt_dir, done_queue, pred_horizon, execute_horizon, centered_action, sub_goal_step, nested_sub_goal_list, collision_check, discounted, constraint_projection):
     '''
     '''
     # define diffusion parameters
     obs_horizon = 1
     B = 1
     # pred_horizon = 12
-    subgoal_stepsize = 4
+    # subgoal_stepsize = 4
     action_dim = 8
     num_diffusion_iters = 100
     noise_scheduler = DDPMScheduler(
@@ -218,7 +292,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     pointbert.to(device)
 
     # load projection head from ckpt_dir
-    enc_checkpoint = torch.load(ckpt_dir + '/encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
+    enc_checkpoint = torch.load(ckpt_dir + '/projection_encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
     projection_head = enc_checkpoint['encoder_head'].to(device)
 
     # load noise_pred_net from ckpt_dir
@@ -345,6 +419,9 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             print("\nSingle-step action: ", unnorm_a)
             terminate = termination_pred[j]
 
+            if iter > 2 and constraint_projection:
+                unnorm_a = get_constrained_action(unnorm_a, pointcloud)
+
             # TODO: uncomment after debugging
             # check for collision with the point cloud if the initial piercing actions have been executed
             if iter > 6 and collision_check:
@@ -393,6 +470,9 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             # wait here
             time.sleep(3)
 
+            # get durations
+            rot_duration, inpos_duration, reset_duration = get_durations(unnorm_a[5])
+
             # open the gripper
             fa.goto_gripper(0.04, block=True)
 
@@ -402,12 +482,12 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
 
             # ------- added scrips from data collection to ensure ee rotation -----
             intermediate_pose.translation = observation_pose.translation
-            fa.goto_pose(intermediate_pose, duration=7)
+            fa.goto_pose(intermediate_pose, duration=reset_duration)
             # unrotate the end-effector
             cur_joints = fa.get_joints()
             cur_joints[6] = ee_joint_pos
-            fa.goto_joints(cur_joints, duration=7)
-            fa.goto_joints(joints, duration=6)
+            fa.goto_joints(cur_joints, duration=rot_duration)
+            fa.goto_joints(joints, duration=reset_duration)
             # goto overehad pose
             fa.goto_pose(observation_pose)
 
@@ -511,19 +591,46 @@ def video_loop(cam_pipeline, save_path, done_queue):
     out.release()
     cv2.destroyAllWindows()
 
+def split_with_horizons(arr, pred_horizon=16, execute_horizon=8, sub_goal_horizon=4):
+    result = []
+    step = execute_horizon // sub_goal_horizon
+    window_size = pred_horizon // sub_goal_horizon + 1
+
+    for i in range(0, len(arr), step):
+        window = arr[i:i + window_size]
+        if len(window) < window_size:
+            new_window = arr[-1] * np.ones(window_size)
+            new_window[0:len(window)] = window
+            window = new_window
+        result.append(window)
+        if i + step >= len(arr):
+            break
+    return result
+
+def load_subgoals(nested_idxs, sub_goal_load_path, sub_goal_name):
+    nested_sub_goal_list = []
+    for i in range(len(nested_idxs)):
+        goal_list = []
+        for j in range(len(nested_idxs[i])):
+            subgoal = np.load(sub_goal_load_path + sub_goal_name + str(int(nested_idxs[i][j])) + '.npy')
+            goal_list.append(subgoal)
+        nested_sub_goal_list.append(goal_list)
+    return nested_sub_goal_list
+
 if __name__ == '__main__':
     # -------------------------------------------------------------------
     # ---------------- Experimental Parameters to Define ----------------
     # -------------------------------------------------------------------
     exp_num = 10
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/subgoal_new_data_16_pred_june30_updated_augs' 
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointbert_pretrained_subgoal' 
     centered_action = False
-    sub_goal_step = 4
+    sub_goal_step = 8
     pred_horizon = 16
-    execute_horizon = 16
+    execute_horizon = 8
     collision_check = False
     discounted = True
+    constraint_projection = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -549,36 +656,49 @@ if __name__ == '__main__':
                 'sub_goal_step: ', sub_goal_step,
                 'pred_horizon: ', pred_horizon,
                 'execute_horizon: ', execute_horizon,
-                'collision_check: ', collision_check,}
+                'collision_check: ', collision_check,
+                'constraint_projection: ', constraint_projection}
     
     with open(exp_save + '/experiment_params.txt', 'w') as f:
         f.write(str(exp_dict))
 
     # TODO: load in the list of autoregressively generated sub-goals
-    sub_goal_load_path = '/home/alison/Documents/GitHub/SculptDiff/subgoals/test/step' + str(sub_goal_step) + '/'
+    goal_size = 12
+    sub_goal_load_path = '/home/alison/Documents/GitHub/SculptDiff/subgoals/train/step' + str(sub_goal_step) + '_' + str(goal_size) + '/'
     # sub_goal_name = 'autoregressive_subgoal'
     sub_goal_name = 'unnormalized_pointcloud' # 'gt_subgoal'
-    sub_goal_list = []
+    sub_goal_list_idxs = []
     i = 0
     while os.path.exists(sub_goal_load_path + sub_goal_name + str(i) + '.npy'):
-        sub_goal = np.load(sub_goal_load_path + sub_goal_name + str(i) + '.npy')
-        sub_goal_list.append(sub_goal)
+        sub_goal_list_idxs.append(i)
         i += sub_goal_step
 
-    # TODO: sub_goal_list should be a list of lists
-    # each sub-list should contain pred_horizon / sub_goal_step number of sub-goals
-    if len(sub_goal_list) == 0:
-        raise ValueError("No sub-goals found in the specified path. Please check the sub-goal loading path and file naming convention.")
-    else:
-        nested_sub_goal_list = []
-        for i in range(0, len(sub_goal_list), pred_horizon // sub_goal_step):
-            if len(sub_goal_list[i:i + (pred_horizon // sub_goal_step)]) < (pred_horizon // sub_goal_step):
-                sub_list = []
-                for j in range((pred_horizon // sub_goal_step)):
-                    sub_list.append(sub_goal_list[i])
-                nested_sub_goal_list.append(sub_list)
-            else:
-                nested_sub_goal_list.append(sub_goal_list[i:i + (pred_horizon // sub_goal_step)])
+    nested_idxs = split_with_horizons(sub_goal_list_idxs, pred_horizon=pred_horizon, execute_horizon=execute_horizon, sub_goal_horizon=sub_goal_step)
+    print("\nNested Subgoal Idxs: ", nested_idxs)
+    nested_sub_goal_list = load_subgoals(nested_idxs, sub_goal_load_path, sub_goal_name)
+    
+    
+    # sub_goal_list = []
+    # i = 0
+    # while os.path.exists(sub_goal_load_path + sub_goal_name + str(i) + '.npy'):
+    #     sub_goal = np.load(sub_goal_load_path + sub_goal_name + str(i) + '.npy')
+    #     sub_goal_list.append(sub_goal)
+    #     i += sub_goal_step
+
+    # # TODO: sub_goal_list should be a list of lists
+    # # each sub-list should contain pred_horizon / sub_goal_step number of sub-goals
+    # if len(sub_goal_list) == 0:
+    #     raise ValueError("No sub-goals found in the specified path. Please check the sub-goal loading path and file naming convention.")
+    # else:
+    #     nested_sub_goal_list = []
+    #     for i in range(0, len(sub_goal_list), pred_horizon // sub_goal_step):
+    #         if len(sub_goal_list[i:i + (pred_horizon // sub_goal_step)]) < (pred_horizon // sub_goal_step):
+    #             sub_list = []
+    #             for j in range((pred_horizon // sub_goal_step)):
+    #                 sub_list.append(sub_goal_list[i])
+    #             nested_sub_goal_list.append(sub_list)
+    #         else:
+    #             nested_sub_goal_list.append(sub_goal_list[i:i + (pred_horizon // sub_goal_step)])
             # print("Length: ", len(sub_goal_list[i:i + (pred_horizon // sub_goal_step)]))
 
     
@@ -616,8 +736,10 @@ if __name__ == '__main__':
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, pred_horizon, execute_horizon, centered_action, sub_goal_step, nested_sub_goal_list, collision_check, discounted))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, pred_horizon, execute_horizon, centered_action, sub_goal_step, nested_sub_goal_list, collision_check, discounted, constraint_projection))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, video_save_path, done_queue))
 
     main_thread.start()
     video_thread.start()
+
+

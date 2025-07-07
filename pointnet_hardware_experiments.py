@@ -2,6 +2,7 @@ import os
 import cv2
 import time
 import math
+import copy
 import torch
 import queue
 import threading
@@ -12,9 +13,61 @@ import robomail.vision as vis
 from frankapy import FrankaArm
 from pcl_utils import *
 from test_collision_checker import check_finger_collision
-from pointnet.models.model_dp3_pytorch import PointNetEncoderXYZ
 from scipy.spatial.transform import Rotation
+from scipy.optimize import root_scalar
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
+
+
+def get_constrained_action(unnorm_a, pointcloud):
+    '''
+    Constrain the unnorm_a x,y components to the constraint
+    that x^2 + y^2 >= r, where r is the mean radius of the 
+    current clay circle (calculated by getting min/max of 
+    the point cloud).
+    '''
+    pcl_center = np.array([0.630, -0.0054, 0.074])
+    ee_center = np.array([0.608, 0.014, 0.125])
+
+    # get the min and max x and y components of the pointcloud
+    pcl_copy = copy.deepcopy(pointcloud)
+    pcl_copy = pcl_copy / 10.0
+    pcl_copy = pcl_copy - pcl_center
+    pcl_mins = np.min(pcl_copy, axis=0) 
+    pcl_maxs = np.max(pcl_copy, axis=0) 
+    minx = pcl_mins[0]
+    maxx = pcl_maxs[0] 
+    miny = pcl_mins[1]
+    maxy = pcl_maxs[1]
+
+    # NOTE: if this is not a reliable way to find good radius constraint (i.e. too much noise)
+    # then instead project all points into x,y plane and do a few optimization steps to find
+    # best circle fit to minimize radius, but fit most ~95% of points inside
+
+    # get the mean radius constraint
+    r = (np.mean([maxx-minx, maxy-miny]) / 2.0) - 0.007
+
+    # center the unnorm_a x and y components
+    x = unnorm_a[0] - ee_center[0]
+    y = unnorm_a[1] - ee_center[1]
+    print("\nOld x,y: ", x, y)
+    print("R: ", r)
+
+    # check if already follows constraint
+    norm_sq = x**2 + y**2
+    if norm_sq >= r**2:
+        return unnorm_a
+
+    scale = np.sqrt((r**2) / norm_sq)
+    x_new = x * scale
+    y_new = y * scale
+    print("New x,y : ", x_new, y_new)
+
+    a_new = unnorm_a.copy()
+    a_new[0] = x_new + ee_center[0]
+    a_new[1] = y_new + ee_center[1]
+    print("\nPrevious Action: ", unnorm_a)
+    print("New Constrained Action: ", a_new)
+    return a_new
 
 
 def calculate_intermediate_pose(final_pose, dist=0.055):
@@ -36,6 +89,26 @@ def calculate_intermediate_pose(final_pose, dist=0.055):
     return intermediate_pose
 
 
+def get_durations(rz):
+    if rz < -60:
+        rot_duration = 5
+        inpos_duration = 15
+        reset_duration = 9
+    elif rz > 190:
+        rot_duration = 7
+        inpos_duration = 15
+        reset_duration = 9
+    elif rz < 90:
+        rot_duration = 3
+        inpos_duration = 5
+        reset_duration = 4
+    else:
+        rot_duration = 5
+        inpos_duration = 7
+        reset_duration = 5
+    return rot_duration, inpos_duration, reset_duration
+
+
 def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     """
     Parameterize a grasp action by the position [x,y,z] Euler angle rotation [rx,ry,rz], and width [d] of the gripper.
@@ -43,6 +116,9 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
 
     :param fa:  franka robot class instantiation
     """
+    # dynamically decide durations
+    rot_duration, inpos_duration, reset_duration = get_durations(rz)
+
     # NOTE: this function cannot distinguish directional rotation goals for the wrist (i.e. rz)
     # first go to rz in the wrist joints
     local_joints = fa.get_joints()
@@ -53,7 +129,7 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
         local_joints[6] = math.radians(45-intermediate_rz)
     else:
         local_joints[6] = math.radians(45-rz)
-    fa.goto_joints(local_joints, duration=9)
+    fa.goto_joints(local_joints, duration=rot_duration)
     final_joints = fa.get_joints()
     print("Executed to joint angle: ", math.degrees(final_joints[6]))
 
@@ -69,17 +145,18 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
 
     intermediate_pose = calculate_intermediate_pose(pose.copy())
 
-    fa.goto_pose(intermediate_pose, duration=15) # NOTE: used to be duration=6
+    fa.goto_pose(intermediate_pose, duration=inpos_duration) # NOTE: used to be duration=6
 
     if rz < -105:
         new_joints = fa.get_joints()
         new_joints[6] = math.radians(45-rz)
         fa.goto_joints(new_joints, duration=9)
 
-    fa.goto_pose(pose, duration=5)
+    fa.goto_pose(pose, duration=reset_duration)
     fa.goto_gripper(d, force=60.0)
     time.sleep(3)
     return intermediate_pose
+
 
 def sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_scheduler, noise_pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, num_diffusion_iters, device):
     B = 1
@@ -134,7 +211,7 @@ def sculptdiff_generate_actions(pointnet_encoder, projection_head, noise_schedul
     return naction, end - start
 
 
-def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check):
+def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_str, ckpt_dir, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check, constraint_projection):
     '''
     '''
     # define diffusion parameters
@@ -161,13 +238,12 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
         a_mins7d = np.array([-0.15, -0.15, -0.05, -90, 0.005])
         a_maxs7d = np.array([0.15, 0.15, 0.05, 90, 0.05])
     else:
-        # a_mins7d = np.array([0.5413, -0.04232, 0.1300, -45, -15, -90, 0.0005])
-        # a_maxs7d = np.array([0.6700, 0.08500, 0.1560, 45, 13, 90, 0.005])
         a_mins7d = np.load(ckpt_dir + '/action_mins.npy')
         a_maxs7d = np.load(ckpt_dir + '/action_maxs.npy')
 
-
+    
     global_pcl_center = np.array([0.630, -0.0054, 0.074])
+
 
     qpos = np.array([0.6, 0.0, 0.165, 0.0, 0.0, 0.0, 0.04])
     qpos = (qpos - a_mins7d) / (a_maxs7d - a_mins7d)
@@ -175,16 +251,12 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     qpos = np.concatenate((qpos, np.array([-1.])), axis=0)
     nagent_pos = torch.from_numpy(qpos).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
 
-    # # initialize the pointnet model
-    # pointnet_encoder = torch.load(ckpt_dir + '/pointnet_best_checkpoint.zip', map_location=torch.device('cpu'))
-    # pointnet_encoder.eval()
-
     # initialize the pointnet model
     pointnet_encoder_state_dict = torch.load(ckpt_dir + '/pointnet_best_checkpoint.zip', map_location=torch.device('cpu'))
     pointnet_encoder = pointnet_encoder_state_dict['encoder'].to(device)
 
     # load projection head from ckpt_dir
-    enc_checkpoint = torch.load(ckpt_dir + '/encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
+    enc_checkpoint = torch.load(ckpt_dir + '/projection_encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
     projection_head = enc_checkpoint['encoder_head'].to(device)
 
     # load noise_pred_net from ckpt_dir
@@ -217,6 +289,8 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     rgb4, _, pc4, _ = cam4._get_next_frame()
     rgb5, _, pc5, _ = cam5._get_next_frame()
 
+    # unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
+
     # for 5x cameras, we need to get the ee pose
     cur_pose = fa.get_pose()
     translation = cur_pose.translation
@@ -235,6 +309,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     o3d.io.write_point_cloud(save_path + '/cam5_pcl0.ply', pc5)
 
     # center the goal based on the goal center
+    # numpy_goal = (np.copy(raw_goal) - ctr) * 10.0
     numpy_goal = (np.copy(raw_goal) - global_pcl_center) * 10
     # scale distance metric goal differently 
     dist_goal = np.copy(numpy_goal)
@@ -246,6 +321,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     goal_pcl = o3d.geometry.PointCloud()
     goal_pcl.points = o3d.utility.Vector3dVector(dist_goal)
     goal_pcl.colors = o3d.utility.Vector3dVector(np.tile(np.array([1,0,0]), (len(dist_goal),1)))
+    # o3d.visualization.draw_geometries([pcl, goal_pcl])
 
     # save observation
     np.save(save_path + '/pcl0.npy', pointcloud)
@@ -299,6 +375,9 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             print("\nSingle-step action: ", unnorm_a)
             terminate = termination_pred[j]
 
+            if iter > 2 and constraint_projection:
+                unnorm_a = get_constrained_action(unnorm_a, pointcloud)
+
             # check for collision with the point cloud if the initial piercing actions have been executed
             if iter > 6 and collision_check:
                 collision = check_finger_collision(unnorm_a, pcl, vis=False)
@@ -312,6 +391,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
                     action_pred = (pred_action[:,0:7] + 1.0) / 2.0
                     action_pred = action_pred * (a_maxs7d - a_mins7d) + a_mins7d
                     unnorm_a = action_pred[j,:]
+                    print("unnorm a new: ", unnorm_a)
                     terminate = termination_pred[j]
                     collision = check_finger_collision(unnorm_a, pcl, vis=False)
 
@@ -327,23 +407,33 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
                 print("Rz too large, wrapping")
                 unnorm_a[5] = -(360 - unnorm_a[5])
             # check if in the unexecutable zone
-            if unnorm_a[5] < -120 and unnorm_a[5] >= -135:
+            if unnorm_a[5] < -117 and unnorm_a[5] >= -135:
                 print("Rz in unexecutable zone, clipping")
                 unnorm_a[5] = -117
             # check if need to wrap angles for unexecutable zone
-            elif unnorm_a[5] < -120:
+            if unnorm_a[5] < -120:
                 print("Rz too small, wrapping")
                 unnorm_a[5] = 180 + 180 - np.abs(unnorm_a[5])
             # check if need to wrap angles for unexecutable zone
-            elif unnorm_a[5] > 210:
+            if unnorm_a[5] > 207:
                 print("Rz in unexecutable zone, clipping")
                 unnorm_a[5] = 207
+
+            if unnorm_a[3] < -45:
+                print("Rx too small")
+                unnorm_a[3] = 360 + unnorm_a[3]
+            elif unnorm_a[3] > 45:
+                print("Rx too big")
+                unnorm_a[3] = unnorm_a[3] - 360
 
             intermediate_pose = goto_grasp(fa, unnorm_a[0], unnorm_a[1], unnorm_a[2], unnorm_a[3], unnorm_a[4], unnorm_a[5], unnorm_a[6])
             n_action+=1
 
             # wait here
             time.sleep(3)
+
+            # get durations
+            rot_duration, inpos_duration, reset_duration = get_durations(unnorm_a[5])
 
             # open the gripper
             fa.goto_gripper(0.04, block=True)
@@ -354,12 +444,12 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
 
             # ------- added scrips from data collection to ensure ee rotation -----
             intermediate_pose.translation = observation_pose.translation
-            fa.goto_pose(intermediate_pose, duration=7)
+            fa.goto_pose(intermediate_pose, duration=reset_duration)
             # unrotate the end-effector
             cur_joints = fa.get_joints()
             cur_joints[6] = ee_joint_pos
-            fa.goto_joints(cur_joints, duration=7)
-            fa.goto_joints(joints, duration=6)
+            fa.goto_joints(cur_joints, duration=rot_duration)
+            fa.goto_joints(joints, duration=reset_duration)
             # goto overehad pose
             fa.goto_pose(observation_pose)
 
@@ -369,7 +459,8 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             rgb3, _, pc3, _ = cam3._get_next_frame()
             rgb4, _, pc4, _ = cam4._get_next_frame()
             rgb5, _, pc5, _ = cam5._get_next_frame()
-            
+            # unnorm_pcl, ctr = pcl_vis.unnormalize_fuse_point_clouds_no_base(pc2, pc3, pc4, pc5, color="Orange")
+
             # for 5x cameras, we need to get the ee pose
             cur_pose = fa.get_pose()
             translation = cur_pose.translation
@@ -388,6 +479,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
             o3d.io.write_point_cloud(save_path + '/cam5_pcl' + str(iter) + '.ply', pc5)
 
             # center the goal based on the point cloud center
+            # numpy_goal = (np.copy(raw_goal) - ctr) * 10.0
             numpy_goal = (np.copy(raw_goal) - global_pcl_center) * 10.0
             # scale distance metric goal differently 
             dist_goal = np.copy(numpy_goal)
@@ -476,31 +568,40 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # ---------------- Experimental Parameters to Define ----------------
     # -------------------------------------------------------------------
+    # * straight wall train: Trajectory6/unnormalized_pointcloud29.npy [8 cm] <--- worked with 8 execute horizon, fails with 4
+    # alternative straight wall train: Trajectory1/unnormalized_pointcloud31.npy
+    # other alternative straight wall train: Trajectory5/unnormalized_pointcloud24.npy [7 cm]
+    # * slanted wall train: Trajectory3/unnormalized_pointcloud28.npy [10 cm]
+    # alternative slanted wall train: Trajectory8/unnormalized_pointcloud24.npy [11 cm]
+    # * more slanted wall train: Trajectory9/unnormalized_pointcloud22.npy [12 cm]
+    # straight wall test: Trajectory4/unnormalized_pointcloud19.npy [8 cm]
+    # slanted wall test: Trajectory2/unnormalized_pointcloud22.npy [10 cm]
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointnet_16pred_7datasetfixed_with_augs'
-    goal_path = '/home/alison/Clay_Data/Mar24_Human_Demos_Raw_Thick_Cast_Soft/pottery/Trajectory2/unnormalized_pointcloud33.npy'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointnet_forward' # new_data_16_pred_june30_updated_augs'
+    goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy' # Test/Trajectory0/unnormalized_pointcloud23.npy'  # '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
-    execute_horizon = 16 
-    collision_check = True
+    execute_horizon = 8
+    collision_check = False
+    constraint_projection = True
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
 
-    exp_save = 'Experiments/PointNet_Exp' + str(exp_num)
+    exp_save = 'Experiments/Exp' + str(exp_num)
 
     # check to make sure the experiment number is not already in use, if it is, increment the number to ensure no save overwrites
     while os.path.exists(exp_save):
         exp_num += 1
-        exp_save = 'Experiments/PointNet_Exp' + str(exp_num)
+        exp_save = 'Experiments/Exp' + str(exp_num)
 
     # make the experiment folder
     os.mkdir(exp_save)
 
     # make the experiment folder for the video save
-    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/PointNet_Exp' + str(exp_num))
-    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/PointNet_Exp' + str(exp_num)
+    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/Exp' + str(exp_num))
+    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/Exp' + str(exp_num)
 
     # make the experiment dictionary with important information for the experiment run
     exp_dict = {'goal: ', goal_shape,
@@ -509,7 +610,8 @@ if __name__ == '__main__':
                 'centered_action: ', centered_action,
                 'pred_horizon: ', pred_horizon,
                 'execute_horizon: ', execute_horizon,
-                'collision_check: ', collision_check}
+                'collision_check: ', collision_check,
+                'constraint_prjection: ', constraint_projection}
     
     with open(exp_save + '/experiment_params.txt', 'w') as f:
         f.write(str(exp_dict))
@@ -542,7 +644,7 @@ if __name__ == '__main__':
     # initialize the threads
     done_queue = queue.Queue()
 
-    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check))
+    main_thread = threading.Thread(target=experiment_loop, args=(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, exp_save, goal_shape, model_path, done_queue, centered_action, pred_horizon, execute_horizon, goal_path, collision_check, constraint_projection))
     video_thread = threading.Thread(target=video_loop, args=(pipeline, video_save_path, done_queue))
 
     main_thread.start()
