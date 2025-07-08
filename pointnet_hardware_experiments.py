@@ -578,7 +578,7 @@ if __name__ == '__main__':
     # slanted wall test: Trajectory2/unnormalized_pointcloud22.npy [10 cm]
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointnet_forward' # new_data_16_pred_june30_updated_augs'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointnet_pretrained_forward' # new_data_16_pred_june30_updated_augs'
     goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy' # Test/Trajectory0/unnormalized_pointcloud23.npy'  # '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
@@ -589,19 +589,19 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
 
-    exp_save = 'Experiments/Exp' + str(exp_num)
+    exp_save = 'Experiments/PN_Exp' + str(exp_num)
 
     # check to make sure the experiment number is not already in use, if it is, increment the number to ensure no save overwrites
     while os.path.exists(exp_save):
         exp_num += 1
-        exp_save = 'Experiments/Exp' + str(exp_num)
+        exp_save = 'Experiments/PN_Exp' + str(exp_num)
 
     # make the experiment folder
     os.mkdir(exp_save)
 
     # make the experiment folder for the video save
-    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/Exp' + str(exp_num))
-    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/Exp' + str(exp_num)
+    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/PN_Exp' + str(exp_num))
+    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/PN_Exp' + str(exp_num)
 
     # make the experiment dictionary with important information for the experiment run
     exp_dict = {'goal: ', goal_shape,
