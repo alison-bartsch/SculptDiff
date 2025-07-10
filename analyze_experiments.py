@@ -25,21 +25,89 @@ from sklearn.metrics import mean_squared_error
 #                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Exp20/pcl30.npy'],
 #                     }}
 
-# pointbert subgoal
+# # pointbert subgoal
+# method_dict = {8 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory6/unnormalized_pointcloud29.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp17/pcl40.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp19/pcl40.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp20/pcl40.npy'],
+#                     },
+#                10 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp13/pcl40.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp15/pcl40.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp24/pcl32.npy'],
+#                     },
+#                12 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory9/unnormalized_pointcloud22.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp21/pcl32.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp22/pcl32.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp23/pcl26.npy'],
+#                     }}
+
+# # pointbert cont guidance
+# method_dict = {8 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory6/unnormalized_pointcloud29.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/Exp35/pcl58.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Exp36/pcl38.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Exp37/pcl18.npy'],
+#                     },
+#                10 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/Exp38/pcl31.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Exp39/pcl30.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Exp40/pcl31.npy'], 
+#                     },
+#                12 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory9/unnormalized_pointcloud22.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/Exp41/pcl35.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Exp42/pcl28.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/Exp43/pcl30.npy'],
+#                     }}
+
+# # pointnet forward
+# method_dict = {8 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory6/unnormalized_pointcloud29.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp5/pcl80.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp6/pcl54.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp7/pcl78.npy'],
+#                     },
+#                10 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp2/pcl40.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp3/pcl30.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp4/pcl30.npy'],
+#                     },
+#                12 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory9/unnormalized_pointcloud22.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp8/pcl48.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp10/pcl48.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp11/pcl63.npy'],
+#                     }}
+
+# # pointnet subgoal
+# method_dict = {8 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory6/unnormalized_pointcloud29.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Subgoal_Exp10/pcl40.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Subgoal_Exp11/pcl40.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Subgoal_Exp12/pcl40.npy'],
+#                     },
+#                10 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Subgoal_Exp13/pcl32.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Subgoal_Exp14/pcl40.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Subgoal_Exp15/pcl40.npy'],
+#                     },
+#                12 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory9/unnormalized_pointcloud22.npy',
+#                     'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Subgoal_Exp16/pcl32.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Subgoal_Exp17/pcl32.npy',
+#                                        '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Subgoal_Exp18/pcl32.npy'],
+#                     }}
+
+# pointnet continual guidance
 method_dict = {8 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory6/unnormalized_pointcloud29.npy',
-                    'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp17/pcl40.npy',
-                                       '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp19/pcl40.npy',
-                                       '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp20/pcl40.npy'],
+                    'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp12/pcl84.npy',
+                                       '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp13/pcl75.npy',
+                                       '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp14/pcl60.npy'],
                     },
                10 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy',
-                    'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp13/pcl40.npy',
-                                       '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp15/pcl40.npy',
-                                       '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp24/pcl32.npy'],
+                    'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp15/pcl32.npy',
+                                       '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp16/pcl56.npy',
+                                       '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp17/pcl32.npy'],
                     },
                12 : {'goal_path' : '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory9/unnormalized_pointcloud22.npy',
-                    'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp21/pcl32.npy',
-                                       '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp22/pcl32.npy'],
-                                    #    '/home/alison/Documents/GitHub/SculptDiff/Experiments/Subgoal_Exp23/pcl26.npy'],
+                    'exp_path_list' : ['/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp18/pcl64.npy',
+                                       '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp19/pcl55.npy',
+                                       '/home/alison/Documents/GitHub/SculptDiff/Experiments/PN_Exp20/pcl64.npy'],
                     }}
 
 # # template
@@ -117,13 +185,14 @@ for diam in method_dict:
         calibrated_pcl.colors = target.colors
         calibrated_pcl.points.extend(source.points)
         calibrated_pcl.colors.extend(source.colors)
-        o3d.visualization.draw_geometries([calibrated_pcl])
+     #    o3d.visualization.draw_geometries([calibrated_pcl])
 
         dist_metrics = {'CD': chamfer(np.asarray(source.points), np.asarray(target.points)),
                         'EMD': emd(np.asarray(source.points), np.asarray(target.points))}
 
-        # print("CD: ", dist_metrics['CD'])
-        # print("EMD: ", dist_metrics['EMD'])
+        print("exp: ", method_dict[diam]['exp_path_list'][i])
+        print("CD: ", dist_metrics['CD'])
+        print("EMD: ", dist_metrics['EMD'])
 
         cd_list.append(dist_metrics['CD'])
         emd_list.append(dist_metrics['EMD'])

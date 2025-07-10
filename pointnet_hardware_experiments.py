@@ -524,6 +524,10 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
                 in_progress = False
                 break
 
+            elif iter >= 64:
+                in_progress = False
+                break
+
             iter += 1
             
     # completed the experiment, send the message to the video recording loop
@@ -578,7 +582,7 @@ if __name__ == '__main__':
     # slanted wall test: Trajectory2/unnormalized_pointcloud22.npy [10 cm]
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointnet_pretrained_forward' # new_data_16_pred_june30_updated_augs'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointnet_untrained_forward' # new_data_16_pred_june30_updated_augs'
     goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy' # Test/Trajectory0/unnormalized_pointcloud23.npy'  # '/home/alison/Clay_Data/June18_Human_Demos/pottery/Test/Trajectory1/unnormalized_pointcloud22.npy' # Trajectory2/unnormalized_pointcloud33.npy'
     centered_action = False
     pred_horizon = 16 
