@@ -156,14 +156,14 @@ def goto_grasp(fa, x, y, z, rx, ry, rz, d):
     time.sleep(3)
     return intermediate_pose
 
-def regression_generate_actions(pointbert, projection_head, pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, device):
+def regression_generate_actions(pointnet_encoder, projection_head, pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, device):
     B = 1
     with torch.inference_mode():
         start = time.time()
         # pass the point cloud through Point-BERT to get the latent representation
         state = torch.from_numpy(pointcloud).to(torch.float32)
         states = torch.unsqueeze(state, 0).to(device)
-        tokenized_states = pointbert(states)
+        tokenized_states, _  = pointnet_encoder(states)
         pcl_embed = projection_head(tokenized_states)
         pointcloud_features = pcl_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
 
@@ -171,7 +171,7 @@ def regression_generate_actions(pointbert, projection_head, pred_net, pointcloud
         goal = numpy_goal.copy()
         goal = torch.from_numpy(goal).to(torch.float32)
         goals = torch.unsqueeze(goal, 0).to(device)
-        tokenized_goals = pointbert(goals)
+        tokenized_goals, _ = pointnet_encoder(goals)
         goal_embed = projection_head(tokenized_goals)
         goalcloud_features = goal_embed.unsqueeze(1).repeat(1, obs_horizon, 1)
 
@@ -222,13 +222,9 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     qpos = np.concatenate((qpos, np.array([-1.])), axis=0)
     nagent_pos = torch.from_numpy(qpos).to(torch.float32).unsqueeze(axis=0).unsqueeze(axis=0).to(device)
 
-    # initialize the pointbert model
-    testconfig = cfg_from_yaml_file('pointBERT/cfgs/PointTransformer.yaml')
-    testmodel_config = testconfig.model
-    pointbert = builder.model_builder(testmodel_config)
-    testweights_path = ckpt_dir + '/pointbert_statedict.zip' 
-    pointbert.load_state_dict(torch.load(testweights_path))
-    pointbert.to(device)
+    # initialize the pointnet model
+    pointnet_encoder_state_dict = torch.load(ckpt_dir + '/pointnet_best_checkpoint.zip', map_location=torch.device('cpu'))
+    pointnet_encoder = pointnet_encoder_state_dict['encoder'].to(device)
 
     # load projection head from ckpt_dir
     enc_checkpoint = torch.load(ckpt_dir + '/encoder_best_checkpoint.zip', map_location=torch.device('cpu')) 
@@ -331,7 +327,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
     iter = 1
     in_progress = True
     while in_progress:
-        naction, total_time = regression_generate_actions(pointbert, projection_head, pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, device)
+        naction, total_time = regression_generate_actions(pointnet_encoder, projection_head, pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, device)
         og_nagent_pos = nagent_pos.detach().clone()
         og_pointcloud = pointcloud.copy()
         planning_time_list.append(total_time)
@@ -360,7 +356,7 @@ def experiment_loop(fa, cam1, cam2, cam3, cam4, cam5, pcl_vis, save_path, goal_s
                 while collision and n_checks < 10:
                     n_checks += 1
                     print("\nCollision detected, replanning...")
-                    naction, total_time = regression_generate_actions(pointbert, projection_head, pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, device)
+                    naction, total_time = regression_generate_actions(pointnet_encoder, projection_head, pred_net, pointcloud, numpy_goal, nagent_pos, obs_horizon, action_dim, device)
                     pred_action = naction[0]
                     termination_pred = pred_action[:,7]
                     action_pred = (pred_action[:,0:7] + 1.0) / 2.0
@@ -549,7 +545,7 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     exp_num = 1
     goal_shape = 'pottery' 
-    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/regression_16pred_7datasetfixed_with_augs'
+    model_path = '/home/alison/Documents/GitHub/SculptDiff/checkpoints/pointnet_regression'
     goal_path = '/home/alison/Clay_Data/June18_Human_Demos/pottery/Train/Trajectory3/unnormalized_pointcloud28.npy'
     centered_action = False
     pred_horizon = 16 
@@ -559,19 +555,19 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
 
-    exp_save = 'Experiments/Regression_Exp' + str(exp_num)
+    exp_save = 'Experiments/PN_Regression_Exp' + str(exp_num)
 
     # check to make sure the experiment number is not already in use, if it is, increment the number to ensure no save overwrites
     while os.path.exists(exp_save):
         exp_num += 1
-        exp_save = 'Experiments/Regression_Exp' + str(exp_num)
+        exp_save = 'Experiments/PN_Regression_Exp' + str(exp_num)
 
     # make the experiment folder
     os.mkdir(exp_save)
 
     # make the experiment folder for the video save
-    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/Regression_Exp' + str(exp_num))
-    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/Regression_Exp' + str(exp_num)
+    os.mkdir('/home/alison/Documents/SculptDiff_experiment_videos/PN_Regression_Exp' + str(exp_num))
+    video_save_path = '/home/alison/Documents/SculptDiff_experiment_videos/PN_Regression_Exp' + str(exp_num)
 
     # make the experiment dictionary with important information for the experiment run
     exp_dict = {'goal: ', goal_shape,
